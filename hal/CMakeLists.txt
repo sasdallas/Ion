@@ -1,0 +1,5 @@
+if (ARCH STREQUAL "x86_64")
+    add_subdirectory(halx86)
+else()
+    message(FATAL_ERROR "No HAL for architecture is available")
+endif()
