@@ -1,11 +1,13 @@
 /**
  * @file ionkrnl/ke/x86_64/dbg.c
- * @brief COM port based debugger
+ * @brief Debug
  * 
  * 
  * @copyright
- * Taken from the Boron operating system by iProgramInCpp
- * https://github.com/iProgramMC/Boron/blob/master/boron/source/ke/amd64/debug.c
+ * This file is part of the Ion operating system.
+ * Please see the LICENSE file in the main repository for more details.
+ * 
+ * Copyright (C) 2026 sasdallas
  */
 
 #include <ion/ion.h>

@@ -19,6 +19,5 @@ VOID KiUnknownTrapHandler(TRAP_FRAME *TrapFrame) {
 }
 
 VOID KiPageFaultHandler(TRAP_FRAME *TrapFrame) {
-    DbgPrint("KiPageFaultHandler!!! TF=%p\n", TrapFrame);
     KeBugCheckTrapFrame(TrapFrame, "Unhandled page fault detected at %p", TRAP_ADDR(TrapFrame));
 }

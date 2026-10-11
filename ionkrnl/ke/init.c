@@ -28,8 +28,6 @@ NO_RETURN VOID KeInitialize() {
     INIT_OR_BUGCHECK(MiInitializeKernelArena);
     INIT_OR_BUGCHECK(MiUnmarkUsedMemory);
 
-    *((UINT64*)0xdeaddeaddeaddead) = 0xDEADBEEF;
-
     DISABLE_INTERRUPTS();
     for (;;) {
         KeHaltExecution();
