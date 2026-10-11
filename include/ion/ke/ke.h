@@ -31,6 +31,10 @@ IONAPI VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock);
 IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql);
 IONAPI VOID KeReleaseSpinLock(KSPIN_LOCK *SpinLock, KIRQL NewIrql);
 
+NO_RETURN VOID KeInitialize();
+VOID KeInitializeBsp();
+
 IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...);
+IONAPI NO_RETURN VOID KeBugCheckTrapFrame(TRAP_FRAME *TrapFrame, const CHAR* Message, ...);
 
 #endif

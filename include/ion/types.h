@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef unsigned char UINT8;
 typedef unsigned short UINT16;
@@ -47,6 +48,9 @@ typedef unsigned char BYTE;
 
 typedef int BOOL;
 typedef BYTE BOOLEAN;
+
+#define TRUE true
+#define FALSE false
 
 typedef size_t SIZE_T;
 typedef void VOID;

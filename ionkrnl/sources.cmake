@@ -2,12 +2,15 @@ list(APPEND __KE_SOURCE
                     ke/lock.c
                     ke/init.c
                     ke/bugcheck.c
+                    ke/trap.c
 )
 
 if (ARCH STREQUAL "x86_64")
     list(APPEND __KE_SOURCE
                     ke/x86_64/init.c
                     ke/x86_64/dbg.c
+                    ke/x86_64/cpu.c
+                    ke/x86_64/trap.S
     )
 else()
     message(FATAL_ERROR "Unsupported kernel architecture ${ARCH}")
@@ -15,6 +18,7 @@ endif()
 
 list(APPEND __MM_SOURCE
                     mm/pfndb.c
+                    mm/vmmgr.c
 )
 
 

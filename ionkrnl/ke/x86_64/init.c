@@ -12,7 +12,6 @@
 
 #include <ion/ion.h>
 #include <ion/ke/ke.h>
-#include <ion/ke/mm.h>
 #include <ion/third_party/limine.h>
 
 #if LIMINE_API_REVISION >= 3
@@ -93,19 +92,12 @@ FORCE_INLINE LOADER_MEMORY_TYPE KeConvertLimineType(UINT64 Type) {
 VOID KeInitLoaderParameterBlock() {
     KeLoaderParameterBlock = &__KeLoaderParameterBlock;
 
-    DbgPrint("KeLimineFramebufferRequest response %p\n", KeLimineFramebufferRequest.response);
-    DbgPrint("KeLimineMemmapRequest response %p\n", KeLimineFramebufferRequest.response);
-
     struct limine_memmap_response *MemMap = KeLimineMemmapRequest.response;
-    for (SIZE_T i = 0; i < MemMap->entry_count; i++) {
-        struct limine_memmap_entry *Entry = MemMap->entries[i];
-        DbgPrint("Entry %d: %p - %p type %d\n", i, Entry->base, Entry->base + Entry->length, Entry->type);
-    }
-
     LOADER_MEMORY_REGION *Regions = KeAllocateFromMemmap(MemMap->entry_count * sizeof(LOADER_MEMORY_REGION));
     for (SIZE_T i = 0; i < MemMap->entry_count; i++) {
         struct limine_memmap_entry *Entry = MemMap->entries[i];
         
+        DbgPrint("Limine memory entry: %p - %p (%d)\n", Entry->base, Entry->base + Entry->length, Entry->type);
         Regions[i].Base = Entry->base;
         Regions[i].Length = Entry->length;
         Regions[i].Type = KeConvertLimineType(Entry->type);
@@ -113,7 +105,6 @@ VOID KeInitLoaderParameterBlock() {
 
     KeLoaderParameterBlock->MemoryRegions = Regions;
     KeLoaderParameterBlock->NrMemoryRegions = MemMap->entry_count;
-
 
     /* HHDM */
     KeLoaderParameterBlock->HhdmRegion = KeLimineHhdmRequest.response->offset;
@@ -125,10 +116,10 @@ VOID KeSystemStartup() {
     DbgInit();
 
     DbgPrint("Ion OS kernel\n");
-    DbgPrint("KeSystemStartup in progress\n");
 
+    /* Prepare the LPB */
     KeInitLoaderParameterBlock();
-    MiInitializePfnDatabase();
 
-    for (;;);
+    /* Go */
+    return KeInitialize();
 }

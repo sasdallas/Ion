@@ -11,6 +11,28 @@
  */
 
 #include <ion/ke/ke.h>
+#include <ion/ke/mm.h>
+#include <ion/ion.h>
 
 /* Loader block */
 LOADER_PARAMETER_BLOCK *KeLoaderParameterBlock = NULL;
+
+#define INIT_OR_BUGCHECK(fn) ({ OS_STATUS Status = fn(); if (!OS_SUCCESS(Status)) { KeBugCheckWithMessage("Failed to initialize " #fn ": 0x%08x", Status); }});
+
+NO_RETURN VOID KeInitialize() {
+    /* BSP init prepares the traps */
+    KeInitializeBsp();
+
+    /* Start with Mm init */
+    INIT_OR_BUGCHECK(MiInitializePfnDatabase);
+    INIT_OR_BUGCHECK(MiInitializeKernelArena);
+    INIT_OR_BUGCHECK(MiUnmarkUsedMemory);
+
+    *((UINT64*)0xdeaddeaddeaddead) = 0xDEADBEEF;
+
+    DISABLE_INTERRUPTS();
+    for (;;) {
+        KeHaltExecution();
+    }
+}
+

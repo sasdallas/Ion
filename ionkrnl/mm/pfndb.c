@@ -18,33 +18,52 @@
 
 extern VOID MiMapPageAtAddressEarly(UINT_PTR Address);
 
+/* DEBUG enable */
+#define MM_DEBUG 1
+
+#if MM_DEBUG
+#define DBG_ASSERT assert
+#define DBG(...) DbgPrint(__VA_ARGS__)
+#else
+#define DBG_ASSERT()
+#define DBG(...)
+#endif
+
+/* Lock */
 KSPIN_LOCK MmPfndbLock;
+
+/* Database */
 MMPFN *MmPfnDatabase = (MMPFN*)MM_PFNDB_ADDR;
 
+/* Free list */
 static MMPFN *MmpFreeListHead = NULL;
 static MMPFN *MmpFreeListTail = NULL;
+
+// Add to a freelist
+static VOID MmpAddToFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
+    MMPFN *Existing = *Tail;
+    Existing->Alloc.Next = MmGetPfnNumber(Target);
+    Target->Alloc.Prev = MmGetPfnNumber(Existing);
+    *Tail = Target;
+}
+
+// Remove from a freelist
+static MMPFN* MmpRemoveFromFreelist(MMPFN **Head, MMPFN **Tail) {
+    MMPFN *Existing = *Head;
+    if (Existing == *Tail) {
+        return NULL;
+    }
+
+    MMPFN *Next = &MmPfnDatabase[Existing->Alloc.Next];
+    Next->Alloc.Prev = PFN_INVALID;
+    *Head = Next;
+
+    return Existing;
+}
 
 // Convert to an HHDM address
 UINT_PTR MiConvertToHhdm(UINT_PTR Address) {
     return KeLoaderParameterBlock->HhdmRegion + Address;
-}
-
-// Allocate a physical page
-PFN_NUMBER MmAllocatePhysicalPage() {
-    KIRQL OldIrql;
-    KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
-
-    if (MmpFreeListHead == MmpFreeListTail) {
-        KeBugCheckWithMessage("Out of available memory in freelist");
-    }
-
-    ASSERT(MmpFreeListHead->Alloc.Next != PFN_INVALID);
-
-    MMPFN *Saved = MmpFreeListHead;
-    MmpFreeListHead = &MmPfnDatabase[MmpFreeListHead->Alloc.Next];
-
-    KeReleaseSpinLock(&MmPfndbLock, OldIrql);
-    return MmGetPfnNumber(Saved);
 }
 
 // Allocate a page from the memory map
@@ -52,7 +71,7 @@ UINT_PTR MiAllocatePageFromMemoryMap() {
     for (size_t i = 0; i < KeLoaderParameterBlock->NrMemoryRegions; i++) {
         LOADER_MEMORY_REGION* Region = &KeLoaderParameterBlock->MemoryRegions[i];
         
-        if (Region->Length > PAGE_SIZE) {
+        if (Region->Type == LOADER_MEMORY_AVAIL && Region->Length > PAGE_SIZE) {
             UINT_PTR Saved = Region->Base;
             Region->Length -= PAGE_SIZE;
             Region->Base += PAGE_SIZE;
@@ -62,6 +81,46 @@ UINT_PTR MiAllocatePageFromMemoryMap() {
 
     KeBugCheckWithMessage("MiAllocatePageFromMemoryMap had no available memory to allocate from");
     return 0x0;
+}
+
+// Reference a physical page
+VOID MmHoldPhysicalPage(MMPFN *Pfn) {
+    __atomic_add_fetch(&Pfn->RefCount, 1, __ATOMIC_SEQ_CST);
+}
+
+// Dereference a physical page (will free if refcount hits 0)
+VOID MmReleasePhysicalPage(MMPFN *Pfn) {
+    if (__atomic_sub_fetch(&Pfn->RefCount, 1, __ATOMIC_SEQ_CST) != 0) {
+        return;
+    }
+
+    KIRQL OldIrql;
+    KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
+    Pfn->Type = MM_PFN_FREE;
+    MmpAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
+    KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+}
+
+// Allocate a physical page
+PFN_NUMBER MmAllocatePhysicalPage() {
+    KIRQL OldIrql;
+    KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
+
+    MMPFN *Target = MmpRemoveFromFreelist(&MmpFreeListHead, &MmpFreeListTail);
+    if (Target == NULL) {
+        KeBugCheckWithMessage("Out of available memory in freelist");
+    }
+
+    MmHoldPhysicalPage(Target);
+    Target->Type = MM_PFN_ALLOCATED;
+
+    KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+    return MmGetPfnNumber(Target);
+}
+
+// Free a physical page
+VOID MmFreePhysicalPage(PFN_NUMBER PfnNumber) {
+    MmReleasePhysicalPage(&MmPfnDatabase[PfnNumber]);
 }
 
 // Initialize the PFN database
@@ -100,6 +159,8 @@ OS_STATUS MiInitializePfnDatabase() {
             continue;
         }
 
+        DBG("Initializing valid memory region %p - %p\n", Region->Base, Region->Base + Region->Length);
+
         for (UINT_PTR j = Region->Base; j < Region->Base + Region->Length; j += PAGE_SIZE) {
             PFN_NUMBER PfnNumber = MmConvertPhysToPfn(j);
             MMPFN *Pfn = &MmPfnDatabase[PfnNumber];
@@ -108,28 +169,27 @@ OS_STATUS MiInitializePfnDatabase() {
                 Pfn->Type = MM_PFN_ALLOCATED;
                 Pfn->RefCount = 1;
                 continue;
-            }
-
-            Pfn->Type = MM_PFN_FREE;
-            Pfn->RefCount = 0;
-
-            if (LastPfn) {
-                LastPfn->Alloc.Next = PfnNumber;
-                Pfn->Alloc.Prev = LastPfnNumber;
             } else {
-                Pfn->Alloc.Prev = PFN_INVALID;
+                Pfn->Type = MM_PFN_FREE;
+                Pfn->RefCount = 0;
+
+                if (LastPfn) {
+                    LastPfn->Alloc.Next = PfnNumber;
+                    Pfn->Alloc.Prev = LastPfnNumber;
+                } else {
+                    Pfn->Alloc.Prev = PFN_INVALID;
+                }
+
+                Pfn->Alloc.Next = PFN_INVALID;
+                LastPfn = Pfn;
+                LastPfnNumber = PfnNumber;
+
+                if (!MmpFreeListHead) MmpFreeListHead = Pfn;
+                MmpFreeListTail = Pfn;
             }
-
-            Pfn->Alloc.Next = PFN_INVALID;
-            LastPfn = Pfn;
-            LastPfnNumber = PfnNumber;
-
-            if (!MmpFreeListHead) MmpFreeListHead = Pfn;
-            MmpFreeListTail = Pfn;
         }
     }
 
     DbgPrint("MiInitializePfnDatabase finished\n");
-    DbgPrint("MmAllocatePhysicalPage returned PFN %zu\n", MmAllocatePhysicalPage());
     return STATUS_SUCCESS;
 }

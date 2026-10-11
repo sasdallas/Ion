@@ -26,6 +26,6 @@ VOID DbgPrintMsg(const CHAR* Message, ...);
 // little helper
 #define __HELPER1(x) #x
 #define __HELPER2(x) __HELPER1(x)
-#define DbgPrint(...) DbgPrintMsg("(" __FILE__ ":" __HELPER2(__LINE__)  ") " __VA_ARGS__)
+#define DbgPrint(stmt, ...) DbgPrintMsg("(" __FILE__ ":" __HELPER2(__LINE__)  ") " stmt, ## __VA_ARGS__)
 
 #endif

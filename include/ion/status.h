@@ -25,5 +25,6 @@ typedef int OS_STATUS;
 #define STATUS_SUCCESS              __SUCCESS(0x0)
 #define STATUS_INTERNAL_ERROR       __ERROR(0x1)
 #define STATUS_INVALID_PARAMETER    __ERROR(0x2)
+#define STATUS_NO_MEMORY            __ERROR(0x3)
 
 #endif

@@ -15,5 +15,6 @@
 
 #include <ion/base.h>
 #include <ion/rtl.h>
+#include <ion/list.h>
 
 #endif

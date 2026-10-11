@@ -21,9 +21,31 @@ IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...) {
     RtlFormatStringVa(Buffer, 512, Message, ap);
     va_end(ap);
 
-    DbgPrintMsg("\nIon fatal exception detected while loading.\n");
+    DbgPrintMsg("\nFatal exception trap. The system has been halted.\n");
     DbgPrintMsg("\033[31mSTOP: \033[0m%s\n", Buffer);
-    DbgPrintMsg("\nThe system will now halt.\n");
+    DbgPrintMsg("\nPlease report this issue.\n");
+
+    // Halt forever (todo move)
+    DISABLE_INTERRUPTS();
+    for (;;) {
+        KeHaltExecution();
+    }
+}
+
+IONAPI NO_RETURN VOID KeBugCheckTrapFrame(TRAP_FRAME *TrapFrame, const CHAR* Message, ...) {
+    // TODO: Improve the formatting on this
+    va_list ap;
+    va_start(ap, Message);
+    char Buffer[512];
+    RtlFormatStringVa(Buffer, 512, Message, ap);
+    va_end(ap);
+
+    DbgPrintMsg("\nFatal exception trap. The system has been halted.\n");
+    DbgPrintMsg("\033[31mSTOP: \033[0m%s\n", Buffer);
+    
+    DbgPrintMsg("\n");
+    KePrintTrapFrame(TrapFrame);
+    DbgPrintMsg("\nPlease report this issue.\n");
 
     // Halt forever (todo move)
     DISABLE_INTERRUPTS();
