@@ -25,8 +25,8 @@ extern VOID MiMapPageAtAddressEarly(UINT_PTR Address);
 #define DBG_ASSERT assert
 #define DBG(...) DbgPrint(__VA_ARGS__)
 #else
-#define DBG_ASSERT()
-#define DBG(...)
+#define DBG_ASSERT(x) ((void)0)
+#define DBG(...) ((void)0)
 #endif
 
 /* Lock */

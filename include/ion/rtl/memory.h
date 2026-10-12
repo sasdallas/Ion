@@ -21,4 +21,6 @@ FORCE_INLINE VOID RtlZeroMemory(VOID* Memory, SIZE_T Size) {
     return RtlFillMemory(Memory, 0, Size);
 }
 
+void *memset(void *s, int ch, size_t n);
+
 #endif

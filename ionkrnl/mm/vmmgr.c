@@ -62,21 +62,17 @@ static MM_ARENA_NODE *MmAllocateArenaNode() {
 
     // Allocate from it
     MM_ARENA_NODE *AllocNode = NULL;
-    for (int i = 0; i < 4; i++) {
-        UINT64 Bitmask = ~(TargetPage->Bitmap[i]);
+    for (SIZE_T i = 0; i < 4 && i * 64 < NODES_PER_PAGE; i++) {
+        SIZE_T Remaining = NODES_PER_PAGE - i * 64;
+        UINT64 ValidBits = Remaining >= 64 ? ~0ULL : (1ULL << Remaining) - 1;
+        UINT64 Bitmask = ~TargetPage->Bitmap[i] & ValidBits;
         if (Bitmask == 0) continue;
         
         INT Bit = __builtin_ctzll(Bitmask);
-        if ((Bit + (i * 64)) >= NODES_PER_PAGE) {
-            // Even if the bitmap says so, there are no more nodes remaining in this page.
-            // This is a kernel bug
-            break;
-        }
-
-        TargetPage->Bitmap[i] |= (1 << Bit);
+        TargetPage->Bitmap[i] |= (1ULL << Bit);
         TargetPage->Active += 1;
 
-        AllocNode = &TargetPage->Nodes[Bit + (i * NODES_PER_PAGE)];
+        AllocNode = &TargetPage->Nodes[Bit + (i * 64)];
         break;
     }
 
@@ -455,10 +451,14 @@ _Exit:
             MmConvertPfnToPhys(Frame),
             Protection
         );
-    }
 
-    // TODO: replace with a call to MmInvalidateRange for TLB shootdowns when implemented
-    MmuInvalidateRange(Address, NumPages);
+        // The virtual address may still have a translation from an earlier allocation.
+        MmuInvalidateRange(i, 1);
+
+        if ((Flags & MM_ALLOC_UNINIT) == 0) {
+            RtlZeroMemory((VOID*)i, PAGE_SIZE);
+        }
+    }
 
     return STATUS_SUCCESS;
 }

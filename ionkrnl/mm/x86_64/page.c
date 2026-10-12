@@ -52,7 +52,7 @@ VOID MiMapPageAtAddressEarly(UINT_PTR Address) {
         UINT_PTR NewPage = MiAllocatePageFromMemoryMap();
         *Pte = NewPage | MM_PTE_PRESENT | MM_PTE_WRITABLE;
     
-        asm volatile ("invlpg %0" :: "m"(Address));
+        asm volatile ("invlpg (%0)" :: "r"(Address) : "memory");
     }
 }
 

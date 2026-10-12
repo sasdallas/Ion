@@ -48,6 +48,12 @@
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CONTAINING_RECORD(Pointer, Type, Field) ((Type*)((uintptr_t)(Pointer) - (uintptr_t)offsetof(Type, Field)))
 #define BIT(x) (1ULL << (x))
+#define ALIGN_UP(val, align) (((val) + (align) - 1) & ~((align)-1))
+#define ALIGN_DOWN(val, align) (((val) & ~((align)-1)))
+#define IS_ALIGNED(val, align) (((val) & ((align)-1))==0)
+#define ALIGNOF(type) offsetof(struct { char c; type member; }, member)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 // Declarations
 #define PACKED __attribute__((packed))

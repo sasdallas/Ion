@@ -27,6 +27,10 @@ NO_RETURN VOID KeInitialize() {
     INIT_OR_BUGCHECK(MiInitializePfnDatabase);
     INIT_OR_BUGCHECK(MiInitializeKernelArena);
     INIT_OR_BUGCHECK(MiUnmarkUsedMemory);
+    INIT_OR_BUGCHECK(MiInitializePoolManager);
+    INIT_OR_BUGCHECK(MiInitializeKernelHeaps);
+
+    DbgPrint("KeInitialize has finished, halting!\n");
 
     DISABLE_INTERRUPTS();
     for (;;) {
