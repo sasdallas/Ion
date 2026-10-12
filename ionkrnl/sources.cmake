@@ -19,6 +19,8 @@ endif()
 list(APPEND __MM_SOURCE
                     mm/pfndb.c
                     mm/vmmgr.c
+                    mm/pool.c
+                    mm/heap.c
 )
 
 

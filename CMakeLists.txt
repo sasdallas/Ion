@@ -26,6 +26,7 @@ include(cmake/iso.cmake)
 # C options
 include_directories(${CMAKE_SOURCE_DIR}/include/)
 add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
+add_compile_options("-fno-builtin-memset")
 
 # Directories
 add_subdirectory("third_party")
