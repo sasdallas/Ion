@@ -38,27 +38,87 @@ MMPFN *MmPfnDatabase = (MMPFN*)MM_PFNDB_ADDR;
 /* Free list */
 static MMPFN *MmpFreeListHead = NULL;
 static MMPFN *MmpFreeListTail = NULL;
+static MMPFN *MmpZeroFreeListHead = NULL;
+static MMPFN *MmpZeroFreeListTail = NULL;
 
 // Add to a freelist
-static VOID MmpAddToFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
-    MMPFN *Existing = *Tail;
-    Existing->Alloc.Next = MmGetPfnNumber(Target);
-    Target->Alloc.Prev = MmGetPfnNumber(Existing);
+static VOID MmAddToFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
+    Target->Alloc.Next = PFN_INVALID;
+    Target->Alloc.Prev = *Tail ? MmGetPfnNumber(*Tail) : PFN_INVALID;
+    if (*Tail) {
+        (*Tail)->Alloc.Next = MmGetPfnNumber(Target);
+    } else {
+        *Head = Target;
+    }
     *Tail = Target;
 }
 
 // Remove from a freelist
-static MMPFN* MmpRemoveFromFreelist(MMPFN **Head, MMPFN **Tail) {
+static MMPFN* MmPopFromFreelist(MMPFN **Head, MMPFN **Tail) {
     MMPFN *Existing = *Head;
-    if (Existing == *Tail) {
+    if (Existing == NULL) {
         return NULL;
     }
 
-    MMPFN *Next = &MmPfnDatabase[Existing->Alloc.Next];
-    Next->Alloc.Prev = PFN_INVALID;
-    *Head = Next;
+    if (Existing->Alloc.Next == PFN_INVALID) {
+        *Head = NULL;
+        *Tail = NULL;
+    } else {
+        MMPFN *Next = &MmPfnDatabase[Existing->Alloc.Next];
+        Next->Alloc.Prev = PFN_INVALID;
+        *Head = Next;
+    }
+
+    Existing->Alloc.Next = PFN_INVALID;
+    Existing->Alloc.Prev = PFN_INVALID;
 
     return Existing;
+}
+
+static VOID MmRemoveFromFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
+    if (Target->Alloc.Next != PFN_INVALID) {
+        MMPFN *Next = &MmPfnDatabase[Target->Alloc.Next];
+        Next->Alloc.Prev = Target->Alloc.Prev;
+    }
+
+    if (Target->Alloc.Prev != PFN_INVALID) {
+        MMPFN *Prev = &MmPfnDatabase[Target->Alloc.Prev];
+        Prev->Alloc.Next = Target->Alloc.Next;
+    }
+
+    if (*Head == Target) {
+        *Head = Target->Alloc.Next == PFN_INVALID ? NULL : &MmPfnDatabase[Target->Alloc.Next];
+    }
+
+    if (*Tail == Target) {
+        *Tail = Target->Alloc.Prev == PFN_INVALID ? NULL : &MmPfnDatabase[Target->Alloc.Prev];
+    }
+
+    Target->Alloc.Next = PFN_INVALID;
+    Target->Alloc.Prev = PFN_INVALID;
+}
+
+// Make physical page zeroed
+static VOID MmMakePhysicalPageZeroed(MMPFN *Pfn) {
+    if (Pfn->Type == PFN_TYPE_ZEROED) {
+        return;
+    }
+
+    KIRQL Irql;
+    KeAcquireSpinLock(&MmPfndbLock, &Irql);
+
+    // Zero the pfn
+    PFN_NUMBER PfnNumber = MmGetPfnNumber(Pfn);
+    UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(PfnNumber));
+    RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
+
+    // Move it to a different freelist
+    MmRemoveFromFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
+
+    Pfn->Type = PFN_TYPE_ZEROED;
+    MmAddToFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail, Pfn);
+
+    KeReleaseSpinLock(&MmPfndbLock, Irql);
 }
 
 // Convert to an HHDM address
@@ -96,8 +156,8 @@ VOID MmReleasePhysicalPage(MMPFN *Pfn) {
 
     KIRQL OldIrql;
     KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
-    Pfn->Type = MM_PFN_FREE;
-    MmpAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
+    Pfn->Type = PFN_TYPE_FREE;
+    MmAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
     KeReleaseSpinLock(&MmPfndbLock, OldIrql);
 }
 
@@ -106,21 +166,76 @@ PFN_NUMBER MmAllocatePhysicalPage() {
     KIRQL OldIrql;
     KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
 
-    MMPFN *Target = MmpRemoveFromFreelist(&MmpFreeListHead, &MmpFreeListTail);
+    MMPFN *Target = MmPopFromFreelist(&MmpFreeListHead, &MmpFreeListTail);
     if (Target == NULL) {
-        KeBugCheckWithMessage("Out of available memory in freelist");
+        // Try taking from the zero list
+        Target = MmPopFromFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail);
+
+        if (Target == NULL) {
+            // TODO
+            KeBugCheckWithMessage("Out of memory in all PFN freelists!");
+        }
     }
 
     MmHoldPhysicalPage(Target);
-    Target->Type = MM_PFN_ALLOCATED;
+    Target->Type = PFN_TYPE_ALLOCATED;
 
     KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+    return MmGetPfnNumber(Target);
+}
+
+// Allocate a zeroed physical page
+PFN_NUMBER MmAllocatePhysicalPageZeroed() {
+    KIRQL OldIrql;
+    KeAcquireSpinLock(&MmPfndbLock, &OldIrql);
+
+    MMPFN *Target = MmPopFromFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail);
+    if (Target == NULL) {
+        // Try taking from the nonzero list
+        Target = MmPopFromFreelist(&MmpFreeListHead, &MmpFreeListTail);
+
+        if (Target == NULL) {
+            // TODO
+            KeBugCheckWithMessage("Out of memory in all PFN freelists!");
+        }
+    }
+
+    MmHoldPhysicalPage(Target);
+
+    BOOLEAN ShouldZero = Target->Type != PFN_TYPE_ZEROED;
+    Target->Type = PFN_TYPE_ALLOCATED;
+
+    KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+
+    // If needed, zero the physical page too
+    if (ShouldZero == TRUE) {
+        UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(MmGetPfnNumber(Target)));
+        RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
+    }
+
     return MmGetPfnNumber(Target);
 }
 
 // Free a physical page
 VOID MmFreePhysicalPage(PFN_NUMBER PfnNumber) {
     MmReleasePhysicalPage(&MmPfnDatabase[PfnNumber]);
+}
+
+// Zero some pages
+static VOID MiZeroSomePages() {
+    for (int i = 0; i < 200; i++) {
+        PFN_NUMBER PfnNumber = MmAllocatePhysicalPage();
+        ASSERT(PfnNumber != PFN_INVALID);
+
+        UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(PfnNumber));
+        RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
+
+        MMPFN *Pfn = &MmPfnDatabase[PfnNumber];
+        Pfn->Type = PFN_TYPE_ZEROED;
+        Pfn->RefCount = 0;
+
+        MmAddToFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail, Pfn);
+    }
 }
 
 // Initialize the PFN database
@@ -151,8 +266,6 @@ OS_STATUS MiInitializePfnDatabase() {
     }
 
     // Now the database must be initialized
-    MMPFN *LastPfn = NULL;
-    PFN_NUMBER LastPfnNumber;
     for (int i = 0; i < KeLoaderParameterBlock->NrMemoryRegions; i++) {
         LOADER_MEMORY_REGION* Region = &KeLoaderParameterBlock->MemoryRegions[i];
         if (Region->Type != LOADER_MEMORY_AVAIL && Region->Type != LOADER_MEMORY_KERNEL) {
@@ -166,29 +279,21 @@ OS_STATUS MiInitializePfnDatabase() {
             MMPFN *Pfn = &MmPfnDatabase[PfnNumber];
 
             if (Region->Type != LOADER_MEMORY_AVAIL) {
-                Pfn->Type = MM_PFN_ALLOCATED;
+                Pfn->Type = PFN_TYPE_ALLOCATED;
                 Pfn->RefCount = 1;
                 continue;
             } else {
-                Pfn->Type = MM_PFN_FREE;
+                Pfn->Type = PFN_TYPE_FREE;
                 Pfn->RefCount = 0;
 
-                if (LastPfn) {
-                    LastPfn->Alloc.Next = PfnNumber;
-                    Pfn->Alloc.Prev = LastPfnNumber;
-                } else {
-                    Pfn->Alloc.Prev = PFN_INVALID;
-                }
-
-                Pfn->Alloc.Next = PFN_INVALID;
-                LastPfn = Pfn;
-                LastPfnNumber = PfnNumber;
-
-                if (!MmpFreeListHead) MmpFreeListHead = Pfn;
-                MmpFreeListTail = Pfn;
+                MmAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
             }
         }
     }
+
+    // If we clean out a few pages before initialization it helps greatly
+    // since most of the pages will need to be zeroed by the heap anyways
+    MiZeroSomePages();
 
     DbgPrint("MiInitializePfnDatabase finished\n");
     return STATUS_SUCCESS;

@@ -83,6 +83,7 @@ UINT_PTR MmuGetPhysicalAddress(UINT_PTR PageTable, UINT_PTR VirtualAddress);
 
 /* Mm: Memory management */
 PFN_NUMBER MmAllocatePhysicalPage();
+PFN_NUMBER MmAllocatePhysicalPageZeroed();
 VOID MmFreePhysicalPage(PFN_NUMBER PfnNumber);
 VOID MmHoldPhysicalPage(MMPFN *Pfn);
 VOID MmReleasePhysicalPage(MMPFN *Pfn);

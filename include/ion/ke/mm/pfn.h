@@ -19,8 +19,9 @@ typedef ULONG_PTR PFN_NUMBER;
 
 #define PFN_INVALID ((PFN_NUMBER)(-1))
 
-#define MM_PFN_FREE         0
-#define MM_PFN_ALLOCATED    1
+#define PFN_TYPE_FREE         0
+#define PFN_TYPE_ZEROED       1 // also says this PFN is free
+#define PFN_TYPE_ALLOCATED    2
 
 typedef struct _MMPFN {
     struct {

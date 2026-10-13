@@ -443,7 +443,13 @@ _Exit:
 
     // TODO: On userspace allocations, some of this will have to be demand-paged in
     for (UINT_PTR i = Address; i < Address + NumPages * PAGE_SIZE; i += PAGE_SIZE) {
-        PFN_NUMBER Frame = MmAllocatePhysicalPage();
+        PFN_NUMBER Frame;
+        
+        if ((Flags & MM_ALLOC_UNINIT)) {
+            Frame = MmAllocatePhysicalPage();
+        } else {
+            Frame = MmAllocatePhysicalPageZeroed();
+        }
 
         MmuMapPage(
             MmuCurrentPageTable(),
@@ -454,10 +460,6 @@ _Exit:
 
         // The virtual address may still have a translation from an earlier allocation.
         MmuInvalidateRange(i, 1);
-
-        if ((Flags & MM_ALLOC_UNINIT) == 0) {
-            RtlZeroMemory((VOID*)i, PAGE_SIZE);
-        }
     }
 
     return STATUS_SUCCESS;
