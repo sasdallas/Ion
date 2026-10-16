@@ -30,11 +30,39 @@ typedef struct _LOADER_MEMORY_REGION {
     LOADER_MEMORY_TYPE Type;
 } LOADER_MEMORY_REGION;
 
+typedef struct _LOADER_MODULE {
+    UINT_PTR Base;
+    CHAR *Path;
+    SIZE_T Size;
+    CHAR *Cmdline;
+} LOADER_MODULE;
+
+typedef struct _LOADER_FRAMEBUFFER {
+    UINT_PTR Address;
+    SIZE_T Size;
+    UINT64 Width;
+    UINT64 Height;
+    UINT64 Pitch;
+    USHORT Bpp;
+    UCHAR MemoryModel;
+    UCHAR RedMaskSize;
+    UCHAR RedMaskShift;
+    UCHAR GreenMaskSize;
+    UCHAR GreenMaskShift;
+    UCHAR BlueMaskSize;
+    UCHAR BlueMaskShift;
+} LOADER_FRAMEBUFFER;
+
 typedef struct _LOADER_PARAMETER_BLOCK {
     LOADER_MEMORY_REGION *MemoryRegions;
     SIZE_T NrMemoryRegions;
-
     UINT_PTR HhdmRegion;
+
+    LOADER_MODULE *LoadedModules;
+    SIZE_T NrLoadedModules;
+
+    LOADER_FRAMEBUFFER *Framebuffers;
+    SIZE_T NrFramebuffers;
 } LOADER_PARAMETER_BLOCK;
 
 #endif

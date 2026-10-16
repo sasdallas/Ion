@@ -4,6 +4,7 @@ set(__KRNL_SOURCE)
 include(sources.cmake)
 
 add_executable(ionkrnl ${__KRNL_SOURCE})
+target_compile_definitions(ionkrnl PRIVATE KERNEL)
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/linker/${ARCH}.ld")
 if (NOT EXISTS "${LINKER_SCRIPT}")

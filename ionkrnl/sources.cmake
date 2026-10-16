@@ -32,4 +32,12 @@ else()
     message(FATAL_ERROR "Unsupported kernel architecture ${ARCH}")
 endif()
 
-list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE})
+list(APPEND __LDR_SOURCE
+                    ldr/ldr.c
+)
+
+list(APPEND __HAL_SOURCE
+                    hal/hal.c
+)
+
+list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE})

@@ -13,12 +13,11 @@
 #ifndef _ION_RTL_DBG_H
 #define _ION_RTL_DBG_H 1
 
-#include <ion/status.h>
-#include <ion/types.h>
+#include <ion/base.h>
 
 // RTL/Ke
 OS_STATUS DbgInit();
-VOID DbgPrintString(const CHAR* String);
+IONAPI VOID DbgPrintString(const CHAR* String);
 
 // RTL
 VOID DbgPrintMsg(const CHAR* Message, ...);

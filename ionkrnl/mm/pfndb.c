@@ -41,6 +41,32 @@ static MMPFN *MmpFreeListTail = NULL;
 static MMPFN *MmpZeroFreeListHead = NULL;
 static MMPFN *MmpZeroFreeListTail = NULL;
 
+/* Stats */
+SIZE_T MmTotalPhysicalMemory = 0;
+SIZE_T MmUsedPhysicalMemory = 0;
+
+// Convert to an HHDM address
+UINT_PTR MiConvertToHhdm(UINT_PTR Address) {
+    return KeLoaderParameterBlock->HhdmRegion + Address;
+}
+
+// Allocate a page from the memory map
+UINT_PTR MiAllocatePageFromMemoryMap() {
+    for (size_t i = 0; i < KeLoaderParameterBlock->NrMemoryRegions; i++) {
+        LOADER_MEMORY_REGION* Region = &KeLoaderParameterBlock->MemoryRegions[i];
+        
+        if (Region->Type == LOADER_MEMORY_AVAIL && Region->Length > PAGE_SIZE) {
+            UINT_PTR Saved = Region->Base;
+            Region->Length -= PAGE_SIZE;
+            Region->Base += PAGE_SIZE;
+            return Saved;
+        }
+    }
+
+    KeBugCheckWithMessage("MiAllocatePageFromMemoryMap had no available memory to allocate from");
+    return 0x0;
+}
+
 // Add to a freelist
 static VOID MmAddToFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
     Target->Alloc.Next = PFN_INVALID;
@@ -121,28 +147,6 @@ static VOID MmMakePhysicalPageZeroed(MMPFN *Pfn) {
     KeReleaseSpinLock(&MmPfndbLock, Irql);
 }
 
-// Convert to an HHDM address
-UINT_PTR MiConvertToHhdm(UINT_PTR Address) {
-    return KeLoaderParameterBlock->HhdmRegion + Address;
-}
-
-// Allocate a page from the memory map
-UINT_PTR MiAllocatePageFromMemoryMap() {
-    for (size_t i = 0; i < KeLoaderParameterBlock->NrMemoryRegions; i++) {
-        LOADER_MEMORY_REGION* Region = &KeLoaderParameterBlock->MemoryRegions[i];
-        
-        if (Region->Type == LOADER_MEMORY_AVAIL && Region->Length > PAGE_SIZE) {
-            UINT_PTR Saved = Region->Base;
-            Region->Length -= PAGE_SIZE;
-            Region->Base += PAGE_SIZE;
-            return Saved;
-        }
-    }
-
-    KeBugCheckWithMessage("MiAllocatePageFromMemoryMap had no available memory to allocate from");
-    return 0x0;
-}
-
 // Reference a physical page
 VOID MmHoldPhysicalPage(MMPFN *Pfn) {
     __atomic_add_fetch(&Pfn->RefCount, 1, __ATOMIC_SEQ_CST);
@@ -159,6 +163,9 @@ VOID MmReleasePhysicalPage(MMPFN *Pfn) {
     Pfn->Type = PFN_TYPE_FREE;
     MmAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
     KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+    
+    // Update statistics
+    __atomic_sub_fetch(&MmUsedPhysicalMemory, PAGE_SIZE, __ATOMIC_RELAXED);
 }
 
 // Allocate a physical page
@@ -181,6 +188,10 @@ PFN_NUMBER MmAllocatePhysicalPage() {
     Target->Type = PFN_TYPE_ALLOCATED;
 
     KeReleaseSpinLock(&MmPfndbLock, OldIrql);
+
+    // Update statistics
+    __atomic_add_fetch(&MmUsedPhysicalMemory, PAGE_SIZE, __ATOMIC_RELAXED);
+
     return MmGetPfnNumber(Target);
 }
 
@@ -212,6 +223,9 @@ PFN_NUMBER MmAllocatePhysicalPageZeroed() {
         UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(MmGetPfnNumber(Target)));
         RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
     }
+
+    // Update statistics
+    __atomic_add_fetch(&MmUsedPhysicalMemory, PAGE_SIZE, __ATOMIC_RELAXED);
 
     return MmGetPfnNumber(Target);
 }
@@ -281,6 +295,8 @@ OS_STATUS MiInitializePfnDatabase() {
             if (Region->Type != LOADER_MEMORY_AVAIL) {
                 Pfn->Type = PFN_TYPE_ALLOCATED;
                 Pfn->RefCount = 1;
+
+                MmUsedPhysicalMemory += PAGE_SIZE;
                 continue;
             } else {
                 Pfn->Type = PFN_TYPE_FREE;
@@ -288,6 +304,8 @@ OS_STATUS MiInitializePfnDatabase() {
 
                 MmAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
             }
+
+            MmTotalPhysicalMemory += PAGE_SIZE;
         }
     }
 

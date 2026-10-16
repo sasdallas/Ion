@@ -7,9 +7,11 @@ set(__RTL_SOURCES
     rtl/dbg.c
     rtl/assert.c
     rtl/memory.c
+    rtl/image.c
+    rtl/status.c
 )
 
 add_library(rtl STATIC ${__RTL_SOURCES})
 add_library(ke_rtl STATIC ${__RTL_SOURCES})
 
-target_compile_definitions(ke_rtl PUBLIC KERNEL)
+target_compile_definitions(ke_rtl PRIVATE KERNEL)

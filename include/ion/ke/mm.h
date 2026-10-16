@@ -66,12 +66,16 @@ FORCE_INLINE UINT_PTR MmPageAlignDown(UINT_PTR Address) {
     return (Address & ~(PAGE_SIZE-1));
 }
 
+extern SIZE_T MmTotalPhysicalMemory;    // The actual amount of memory installed in the system
+extern SIZE_T MmUsedPhysicalMemory;
+
 /* Mi: Memory initialization */
 OS_STATUS MiInitializePfnDatabase();
 OS_STATUS MiInitializeKernelArena();
 OS_STATUS MiInitializePoolManager();
 OS_STATUS MiInitializeKernelHeaps();
 OS_STATUS MiUnmarkUsedMemory();
+OS_STATUS MiMapFramebuffers();
 UINT_PTR MiAllocatePageFromMemoryMap();
 UINT_PTR MiConvertToHhdm(UINT_PTR Address);
 

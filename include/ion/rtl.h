@@ -17,5 +17,7 @@
 #include <ion/rtl/print.h>
 #include <ion/rtl/assert.h>
 #include <ion/rtl/memory.h>
+#include <ion/rtl/image.h>
+#include <ion/rtl/status.h>
 
 #endif

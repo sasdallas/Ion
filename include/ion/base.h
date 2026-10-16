@@ -27,7 +27,8 @@
 #define OPTIONAL
 
 #ifndef __INTELLISENSE__
-#ifdef HAL
+// The kernel provides the HAL stubcalls, whereas the HAL provides the vtable
+#ifdef KERNEL
 #define IONHALAPI __declspec(dllexport)
 #else
 #define IONHALAPI __declspec(dllimport)
@@ -54,6 +55,8 @@
 #define ALIGNOF(type) offsetof(struct { char c; type member; }, member)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define FIELD_OFFSET(structure, member) offsetof((structure), (member))
+#define ARRAYLEN(array) (sizeof(array) / sizeof(array[0]))
 
 // Declarations
 #define PACKED __attribute__((packed))

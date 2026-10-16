@@ -25,6 +25,7 @@
 #endif
 
 extern LOADER_PARAMETER_BLOCK *KeLoaderParameterBlock;
+IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock();
 
 /* Ke functions begin */
 IONAPI VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock);
@@ -36,5 +37,6 @@ VOID KeInitializeBsp();
 
 IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...);
 IONAPI NO_RETURN VOID KeBugCheckTrapFrame(TRAP_FRAME *TrapFrame, const CHAR* Message, ...);
+IONAPI NO_RETURN VOID KeBugCheckWithStatus(OS_STATUS Status, const CHAR* Message, ...);
 
 #endif

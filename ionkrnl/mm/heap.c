@@ -202,4 +202,3 @@ OS_STATUS MiInitializeKernelHeaps() {
 
     return STATUS_SUCCESS;
 }
-

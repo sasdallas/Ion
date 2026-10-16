@@ -112,10 +112,64 @@ VOID MmuUnmapPage(UINT_PTR PageTable, UINT_PTR VirtualAddress) {
 }
 
 UINT_PTR MmuGetPhysicalAddress(UINT_PTR PageTable, UINT_PTR VirtualAddress) {
-    MMPTE *Pte = MmuGetPage(PageTable, VirtualAddress, FALSE);
-    if (Pte == NULL) return 0x0;
+    if (PageTable == 0) {
+        PageTable = MmuCurrentPageTable();
+    }
 
-    return (UINT_PTR)(*Pte & MM_PTE_ADDR_MASK);
+    PML *Pml = (PML*)MiConvertToHhdm(PageTable);
+    for (INT Level = 3; Level > 0; Level--) {
+        UINT_PTR Index = (VirtualAddress >> (PAGE_SHIFT + Level * 9)) & 0x1FF;
+        MMPTE Entry = Pml->Entries[Index];
+        if ((Entry & MM_PTE_PRESENT) == 0) {
+            return 0;
+        }
+
+        if (Entry & MM_PTE_PS) {
+            UINT_PTR PageSize = 1ULL << (PAGE_SHIFT + Level * 9);
+            return (Entry & MM_PTE_ADDR_MASK & ~(PageSize - 1)) | (VirtualAddress & (PageSize - 1));
+        }
+
+        Pml = (PML*)MiConvertToHhdm(Entry & MM_PTE_ADDR_MASK);
+    }
+
+    MMPTE Entry = Pml->Entries[(VirtualAddress >> PAGE_SHIFT) & 0x1FF];
+    if ((Entry & MM_PTE_PRESENT) == 0) {
+        return 0;
+    }
+
+    return (Entry & MM_PTE_ADDR_MASK) | (VirtualAddress & (PAGE_SIZE - 1));
+}
+
+OS_STATUS MiMapFramebuffers() {
+    for (SIZE_T i = 0; i < KeLoaderParameterBlock->NrFramebuffers; i++) {
+        LOADER_FRAMEBUFFER *Framebuffer = &KeLoaderParameterBlock->Framebuffers[i];
+
+        UINT_PTR Offset = Framebuffer->Address & (PAGE_SIZE - 1);
+        SIZE_T NrPages = (Offset + Framebuffer->Size + PAGE_SIZE - 1) / PAGE_SIZE;
+        UINT_PTR OldBase = Framebuffer->Address - Offset;
+
+        VOID *NewBase = MmAllocateVirtualPagesArena(
+            MmKernelArena,
+            NULL,
+            NrPages,
+            MM_ALLOC_UNBACKED,
+            MM_PROT_READ | MM_PROT_WRITE
+        );
+
+        if (NewBase == NULL) {
+            return STATUS_NO_MEMORY;
+        }
+
+        for (SIZE_T Page = 0; Page < NrPages; Page++) {
+            UINT_PTR Physical = MmuGetPhysicalAddress(0, OldBase + Page * PAGE_SIZE);
+            MmuMapPage(0, (UINT_PTR)NewBase + Page * PAGE_SIZE, Physical, MM_PROT_READ | MM_PROT_WRITE);
+        }
+
+        MmuInvalidateRange((UINT_PTR)NewBase, NrPages);
+        Framebuffer->Address = (UINT_PTR)NewBase + Offset;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 VOID MmuInvalidateRange(UINT_PTR Start, SIZE_T NumPages) {

@@ -12,6 +12,7 @@
 
 #include <ion/ion.h>
 #include <ion/x86_64/port.h>
+#include <ion/hal.h>
 
 #define COM_BASE 0x3F8
 #define COM_RBR 0x00 // Receive buffer
@@ -79,6 +80,7 @@ static VOID DbgPrintChar(CHAR c) {
 }
 
 VOID DbgPrintString(const CHAR* String) {
+	HalPrintString(String);
     while (*String) {
 		if (*String == '\n') {
             DbgPrintChar('\r');
