@@ -24,6 +24,7 @@ static MM_POOL *LdrpDllPool = NULL;
 /* Loaded DLL list */
 static LIST_ENTRY LdrLoadedDllList;
 SIZE_T LdrNrLoadedDlls = 0;
+static BOOLEAN LdrReady = FALSE;
 
 static OS_STATUS LdrAddNewImage(VOID *ImageBase, LOADED_DLL **DllOut) {
     IMAGE_NT_HEADERS *NtHeaders = RtlImageNtHeaders(ImageBase);
@@ -127,6 +128,49 @@ VOID *LdrGetSymbol(LOADED_DLL *Dll, const CHAR* SymbolName) {
     }
 
     return NULL;
+}
+
+BOOLEAN LdrFindSymbolByAddress(UINT_PTR Address, const CHAR **DllName, const CHAR **SymbolName, UINT_PTR *Offset) {
+    if (!LdrReady) {
+        return FALSE;
+    }
+
+    for (LIST_ENTRY *Ent = LdrLoadedDllList.Flink; Ent != &LdrLoadedDllList; Ent = Ent->Flink) {
+        LOADED_DLL *Dll = CONTAINING_RECORD(Ent, LOADED_DLL, Entry);
+        if (Address < Dll->ImageBase || Address - Dll->ImageBase >= Dll->ImageSize) {
+            continue;
+        }
+
+        *DllName = Dll->Name;
+        *SymbolName = NULL;
+        *Offset = Address - Dll->ImageBase;
+
+        SIZE_T DirectorySize;
+        IMAGE_EXPORT_DIRECTORY *Exports = RtlImageDirectoryEntryToData((VOID*)Dll->ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &DirectorySize);
+        if (Exports == NULL || DirectorySize < sizeof(IMAGE_EXPORT_DIRECTORY)) {
+            return TRUE;
+        }
+
+        UINT32 *Names = (VOID*)(Dll->ImageBase + Exports->AddressOfNames);
+        USHORT *Ordinals = (VOID*)(Dll->ImageBase + Exports->AddressOfNameOrdinals);
+        UINT32 *Functions = (VOID*)(Dll->ImageBase + Exports->AddressOfFunctions);
+        for (UINT32 i = 0; i < Exports->NumberOfNames; i++) {
+            if (Ordinals[i] >= Exports->NumberOfFunctions || Names[i] >= Dll->ImageSize) {
+                continue;
+            }
+
+            UINT32 Rva = Functions[Ordinals[i]];
+            if (Rva < Dll->ImageSize && Rva <= Address - Dll->ImageBase &&
+                Address - Dll->ImageBase - Rva < *Offset) {
+                *SymbolName = (CHAR*)(Dll->ImageBase + Names[i]);
+                *Offset = Address - Dll->ImageBase - Rva;
+            }
+        }
+
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 static OS_STATUS LdrRelocateImage(VOID *ImageBase, IMAGE_NT_HEADERS *NtHeaders) {
@@ -319,6 +363,7 @@ OS_STATUS LdrInitialize() {
     }
 
     InitializeListHead(&LdrLoadedDllList);
+    LdrReady = TRUE;
 
     // Register the kernel as a loaded DLL
     LOADED_DLL *KernelDll;

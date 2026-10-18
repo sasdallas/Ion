@@ -25,6 +25,7 @@ typedef struct _LOADED_DLL {
 } LOADED_DLL;
 
 VOID *LdrGetSymbol(LOADED_DLL *Dll, const CHAR* SymbolName);
+BOOLEAN LdrFindSymbolByAddress(UINT_PTR Address, const CHAR **DllName, const CHAR **SymbolName, UINT_PTR *Offset);
 LOADED_DLL *LdrFindDllByName(const CHAR* DllName);
 OS_STATUS LdrLoadDll(UINT_PTR ImageBase, SIZE_T ImageSize, LOADED_DLL **DllOut);
 OS_STATUS LdrInitialize();
