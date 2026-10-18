@@ -55,7 +55,7 @@
 #define ALIGNOF(type) offsetof(struct { char c; type member; }, member)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define FIELD_OFFSET(structure, member) offsetof((structure), (member))
+#define FIELD_OFFSET(structure, member) offsetof(structure, member)
 #define ARRAYLEN(array) (sizeof(array) / sizeof(array[0]))
 
 // Declarations

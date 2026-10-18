@@ -17,15 +17,22 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#ifndef __int64
+#define __int64 __INT64_TYPE__
+#endif
+
 typedef unsigned char UINT8;
 typedef unsigned short UINT16;
 typedef unsigned int UINT32;
-typedef unsigned long long UINT64;
+typedef unsigned __int64 UINT64;
 
 typedef signed char INT8;
 typedef signed short INT16;
 typedef signed int INT32;
-typedef signed long long INT64;
+typedef signed __int64 INT64;
+
+typedef __int64 LONG64;
+typedef unsigned __int64 ULONG64; 
 
 typedef char CHAR;
 typedef unsigned char UCHAR;
@@ -36,10 +43,18 @@ typedef unsigned int UINT;
 typedef signed long LONG;
 typedef unsigned long ULONG;
 
+typedef __int64 LONGLONG;
+typedef unsigned __int64 ULONGLONG;
+
+
 #ifdef _ION64
-typedef __UINTPTR_TYPE__ UINT_PTR;
-typedef __UINTPTR_TYPE__ ULONG_PTR;
+typedef __int64 INT_PTR;
+typedef __int64 LONG_PTR;
+typedef unsigned __int64 UINT_PTR;
+typedef unsigned __int64 ULONG_PTR;
 #else
+typedef int INT_PTR;
+typedef long LONG_PTR;
 typedef unsigned int UINT_PTR;
 typedef unsigned long ULONG_PTR;
 #endif
@@ -54,5 +69,7 @@ typedef BYTE BOOLEAN;
 
 typedef size_t SIZE_T;
 typedef void VOID;
+
+typedef VOID *HANDLE;
 
 #endif

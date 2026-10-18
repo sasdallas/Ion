@@ -5,6 +5,7 @@ set(__HAL_SOURCES)
 include(sources.cmake)
 
 add_library(hal SHARED ${__HAL_SOURCES})
+target_compile_options(hal PRIVATE -fno-omit-frame-pointer)
 target_compile_definitions(hal PRIVATE HAL)
 target_include_directories(hal PRIVATE ${CMAKE_SOURCE_DIR}/third_party/flanterm/src)
 

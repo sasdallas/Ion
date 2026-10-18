@@ -16,5 +16,7 @@
 #include <ion/base.h>
 #include <ion/rtl.h>
 #include <ion/list.h>
+#include <ion/access.h>
+#include <ion/atomic.h>
 
 #endif

@@ -12,7 +12,9 @@
 
 #include <ion/ke/ke.h>
 #include <ion/ke/mm.h>
+#include <ion/ke/ob.h>
 #include <ion/ke/ldr.h>
+#include <ion/ke/ps.h>
 #include <ion/hal.h>
 #include <ion/ion.h>
 
@@ -20,10 +22,6 @@
 LOADER_PARAMETER_BLOCK *KeLoaderParameterBlock = NULL;
 
 #define INIT_OR_BUGCHECK(fn) ({ OS_STATUS Status = fn(); if (!OS_SUCCESS(Status)) { KeBugCheckWithStatus(Status, #fn " failed to initialize"); }});
-
-IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock() {
-    return KeLoaderParameterBlock;
-}
 
 OS_STATUS KiInitializeHal() {
     OS_STATUS Status = LdrInitializeHal();
@@ -59,11 +57,21 @@ NO_RETURN VOID KeInitialize() {
     HalConsolePrintf("Copyright (C) Ion Development Team 2026\n");
     HalConsolePrintf("Total physical memory: %zu kB (%zu kB in use)\n\n", MmTotalPhysicalMemory / 1024, MmUsedPhysicalMemory / 1024);
 
-    DbgPrint("KeInitialize has finished, halting!\n");
+    // Ps early
+    INIT_OR_BUGCHECK(PsInitialize);
 
+    // Ob
+    INIT_OR_BUGCHECK(ObInitializeTypeManager);
+
+    KeBugCheckWithStatus(STATUS_INTERNAL_ERROR, "KeInitialize");
+
+    DbgPrint("KeInitialize has finished, halting!\n");
     DISABLE_INTERRUPTS();
     for (;;) {
         KeHaltExecution();
     }
 }
 
+IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock() {
+    return KeLoaderParameterBlock;
+}

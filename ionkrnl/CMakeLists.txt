@@ -5,6 +5,7 @@ include(sources.cmake)
 
 add_executable(ionkrnl ${__KRNL_SOURCE})
 target_compile_definitions(ionkrnl PRIVATE KERNEL)
+target_compile_options(ionkrnl PRIVATE -fno-omit-frame-pointer)
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/linker/${ARCH}.ld")
 if (NOT EXISTS "${LINKER_SCRIPT}")
@@ -22,7 +23,7 @@ set_target_properties(
 )
 
 target_link_options(ionkrnl
-    PRIVATE  -Wl,--exclude-all-symbols,--file-alignment=0x1000,-section-alignment=0x1000)
+    PRIVATE  -Wl,--export-all-symbols,--file-alignment=0x1000,-section-alignment=0x1000)
 
 target_link_options(ionkrnl PRIVATE "-Wl,--entry,KeSystemStartup")
 target_link_libraries(ionkrnl ke_rtl)

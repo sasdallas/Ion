@@ -80,6 +80,9 @@ struct _IDT_DESCRIPTOR {
 /* Primary IDT */
 KIDT KiIdt = { 0 };
 
+/* BSP KCPU */
+KCPU BspCpu = { 0 };
+
 FORCE_INLINE VOID KiInstallIdtr() {
     asm volatile ("lidt %0" :: "m"(KiIdtDescriptor));
 }
@@ -141,4 +144,11 @@ VOID KeInitializeBsp() {
     KiSetInterruptVector(31, (UINT64)&KiReserved2Exception);
 
     KiInstallIdtr();
+
+    // Set the BspCpu
+    KCPU *Bsp = &BspCpu;
+    BspCpu.Self = &BspCpu;
+    BspCpu.LogicalId = BspCpu.HardwareId = 0;
+    asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000102));
+    asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000101));
 }

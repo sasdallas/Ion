@@ -40,4 +40,14 @@ list(APPEND __HAL_SOURCE
                     hal/hal.c
 )
 
-list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE})
+list(APPEND __OB_SOURCE
+                    ob/create.c
+                    ob/type.c
+                    ob/reference.c
+)
+
+list(APPEND __PS_SOURCE
+                    ps/init.c
+)
+
+list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE})

@@ -15,6 +15,7 @@
 
 #include <ion/base.h>
 #include <ion/rtl/dbg.h>
+#include <ion/ke/ke_types.h>
 
 typedef UCHAR KIRQL;
 
@@ -39,6 +40,7 @@ typedef struct _TRAP_FRAME {
 #define TRAP_ADDR(TrapFrame) ((TrapFrame)->Cr2)
 #define TRAP_CODE(TrapFrame) ((TrapFrame)->ErrCode)
 #define TRAP_VECTOR(TrapFrame) ((TrapFrame)->IntNo)
+#define TRAP_FRAME(TrapFrame) ((TrapFrame)->Rbp)
 
 FORCE_INLINE VOID KeHaltExecution() {
     asm volatile ("hlt");
@@ -55,6 +57,18 @@ FORCE_INLINE VOID KePrintTrapFrame(TRAP_FRAME *TrapFrame) {
     DbgPrintMsg("R12 %016llX R13 %016llX R14 %016llX R15 %016llX\n", TrapFrame->R12, TrapFrame->R13, TrapFrame->R14, TrapFrame->R15);
     DbgPrintMsg("ERR %016llX RFL %016llX\n", TrapFrame->ErrCode, TrapFrame->Rflags);
     DbgPrintMsg("PC  %04x:%016llX\n", TrapFrame->Cs, TrapFrame->Rip);
+}
+
+FORCE_INLINE KCPU *KeGetCpu() {
+    KCPU *CpuObject;
+    asm volatile ("mov %%gs:%c1, %0" : "=r" (CpuObject) : "i"(FIELD_OFFSET(KCPU, Self)));
+    return CpuObject;
+}
+
+FORCE_INLINE THREAD *KeGetCurrentThread() {
+    THREAD *Thread;
+    asm volatile ("mov %%gs:%c1, %0" : "=r" (Thread) : "i"(FIELD_OFFSET(KCPU, CurrentThread)));
+    return Thread;
 }
 
 #endif

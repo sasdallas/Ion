@@ -14,7 +14,16 @@
 #define _ION_KE_KE_TYPES_H 1
 
 #include <ion/base.h>
+#include <ion/ke/ps/thread.h>
+#include <ion/ke/ke/processor_mode.h>
 
 typedef UINT_PTR KSPIN_LOCK;
+
+typedef struct _KCPU {
+    struct _KCPU *Self;
+    UINT32 HardwareId;
+    UINT32 LogicalId; // assigned by the kernel
+    THREAD *CurrentThread;
+} KCPU;
 
 #endif

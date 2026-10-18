@@ -39,4 +39,10 @@ IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...);
 IONAPI NO_RETURN VOID KeBugCheckTrapFrame(TRAP_FRAME *TrapFrame, const CHAR* Message, ...);
 IONAPI NO_RETURN VOID KeBugCheckWithStatus(OS_STATUS Status, const CHAR* Message, ...);
 
+// KeOnBsp only safe if scheduling is disabled!!!
+// otherwise you will get switched off. does unsafe KeGetCpu()->LogicalId read
+FORCE_INLINE BOOLEAN KeOnBsp() {
+    return KeGetCpu()->LogicalId == 0;
+}
+
 #endif
