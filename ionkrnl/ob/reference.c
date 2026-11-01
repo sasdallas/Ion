@@ -12,6 +12,7 @@
 
 #include <ion/ke/ob.h>
 #include <ion/ke/ke.h>
+#include <ion/ke/mm.h>
 #include <ion/ion.h>
 
 IONAPI VOID ObDereferenceObject(VOID *Body) {
@@ -21,8 +22,11 @@ IONAPI VOID ObDereferenceObject(VOID *Body) {
     if (Count == 0) {
         ASSERT(Header->HandleCount == 0);
         if (Header->Type->Info.DestroyProcedure) {
-            Header->Type->Info.DestroyProcedure(Header);
+            Header->Type->Info.DestroyProcedure(Body);
         }
+
+        OS_STATUS Status = MmFreeHeap(Header);
+        ASSERT(OS_SUCCESS(Status));
     }
 }
 
