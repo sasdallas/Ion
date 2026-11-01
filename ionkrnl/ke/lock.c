@@ -17,8 +17,7 @@ IONAPI VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock) {
 }
 
 IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql) {
-    /* TODO: IRQL */
-
+    KeRaiseIrql(DISPATCH_LEVEL, OldIrql);
     while (__atomic_test_and_set(SpinLock, __ATOMIC_ACQUIRE)) {
         KeStallExecution();
     }
@@ -26,4 +25,5 @@ IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql) {
 
 IONAPI VOID KeReleaseSpinLock(KSPIN_LOCK *SpinLock, KIRQL NewIrql) {
     __atomic_clear(SpinLock, __ATOMIC_RELEASE);
+    KeLowerIrql(NewIrql);
 }

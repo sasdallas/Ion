@@ -28,13 +28,13 @@ typedef enum _OB_OPEN_REASON {
     ObInheritHandle = 3,
 } OB_OPEN_REASON;
 
+// Object in all of these refers to the body
 typedef VOID (*OB_DUMP_PROCEDURE)(VOID *Object);
 typedef OS_STATUS (*OB_OPEN_PROCEDURE)(VOID *Object, OB_OPEN_REASON OpenReason, INT HandleCount);
 typedef VOID (*OB_CLOSE_PROCEDURE)(VOID *Object, INT HandleCount);
 typedef VOID (*OB_DESTROY_PROCEDURE)(VOID *Object);
 
 typedef struct _OBJECT_TYPE_ATTRIBUTES {
-    ULONG TypeIdentifier;
     ULONG InvalidAttributes; // flags to reject on request 
     MM_HEAP *TargetHeap; // heap to allocate new objects from.
 

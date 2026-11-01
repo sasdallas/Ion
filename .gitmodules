@@ -1,3 +1,6 @@
 [submodule "third_party/flanterm"]
 	path = third_party/flanterm
 	url = https://github.com/Mintsuki/Flanterm.git
+[submodule "third_party/uACPI"]
+	path = third_party/uACPI
+	url = https://github.com/uACPI/uACPI

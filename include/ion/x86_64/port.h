@@ -26,7 +26,7 @@ static inline unsigned short PortRead16(unsigned short Port) {
 }
 
 static inline unsigned long PortRead32(unsigned short Port) {
-    unsigned short r;
+    unsigned long r;
     asm volatile("inl %1, %0" : "=a"(r) : "dN"(Port));
     return r;
 }
