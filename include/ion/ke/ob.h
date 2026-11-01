@@ -31,7 +31,7 @@ FORCE_INLINE VOID ObInitializeObjectAttributes(
 
 IONAPI OS_STATUS ObCreateObject(
     OBJECT_TYPE *ObjectType,
-    OBJECT_ATTRIBUTES *ObjectAttrbutes,
+    OBJECT_ATTRIBUTES *ObjectAttributes,
     ULONG ObjectBodySize,
     VOID **ObjectOutput
 );

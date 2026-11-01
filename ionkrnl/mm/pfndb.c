@@ -46,7 +46,7 @@ SIZE_T MmTotalPhysicalMemory = 0;
 SIZE_T MmUsedPhysicalMemory = 0;
 
 // Convert to an HHDM address
-UINT_PTR MiConvertToHhdm(UINT_PTR Address) {
+IONAPI UINT_PTR MiConvertToHhdm(UINT_PTR Address) {
     return KeLoaderParameterBlock->HhdmRegion + Address;
 }
 
@@ -101,52 +101,6 @@ static MMPFN* MmPopFromFreelist(MMPFN **Head, MMPFN **Tail) {
     return Existing;
 }
 
-static VOID MmRemoveFromFreelist(MMPFN **Head, MMPFN **Tail, MMPFN *Target) {
-    if (Target->Alloc.Next != PFN_INVALID) {
-        MMPFN *Next = &MmPfnDatabase[Target->Alloc.Next];
-        Next->Alloc.Prev = Target->Alloc.Prev;
-    }
-
-    if (Target->Alloc.Prev != PFN_INVALID) {
-        MMPFN *Prev = &MmPfnDatabase[Target->Alloc.Prev];
-        Prev->Alloc.Next = Target->Alloc.Next;
-    }
-
-    if (*Head == Target) {
-        *Head = Target->Alloc.Next == PFN_INVALID ? NULL : &MmPfnDatabase[Target->Alloc.Next];
-    }
-
-    if (*Tail == Target) {
-        *Tail = Target->Alloc.Prev == PFN_INVALID ? NULL : &MmPfnDatabase[Target->Alloc.Prev];
-    }
-
-    Target->Alloc.Next = PFN_INVALID;
-    Target->Alloc.Prev = PFN_INVALID;
-}
-
-// Make physical page zeroed
-static VOID MmMakePhysicalPageZeroed(MMPFN *Pfn) {
-    if (Pfn->Type == PFN_TYPE_ZEROED) {
-        return;
-    }
-
-    KIRQL Irql;
-    KeAcquireSpinLock(&MmPfndbLock, &Irql);
-
-    // Zero the pfn
-    PFN_NUMBER PfnNumber = MmGetPfnNumber(Pfn);
-    UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(PfnNumber));
-    RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
-
-    // Move it to a different freelist
-    MmRemoveFromFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
-
-    Pfn->Type = PFN_TYPE_ZEROED;
-    MmAddToFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail, Pfn);
-
-    KeReleaseSpinLock(&MmPfndbLock, Irql);
-}
-
 // Reference a physical page
 VOID MmHoldPhysicalPage(MMPFN *Pfn) {
     __atomic_add_fetch(&Pfn->RefCount, 1, __ATOMIC_SEQ_CST);
@@ -154,6 +108,7 @@ VOID MmHoldPhysicalPage(MMPFN *Pfn) {
 
 // Dereference a physical page (will free if refcount hits 0)
 VOID MmReleasePhysicalPage(MMPFN *Pfn) {
+    ASSERT(Pfn->RefCount > 0);
     if (__atomic_sub_fetch(&Pfn->RefCount, 1, __ATOMIC_SEQ_CST) != 0) {
         return;
     }
@@ -238,17 +193,20 @@ VOID MmFreePhysicalPage(PFN_NUMBER PfnNumber) {
 // Zero some pages
 static VOID MiZeroSomePages() {
     for (int i = 0; i < 200; i++) {
-        PFN_NUMBER PfnNumber = MmAllocatePhysicalPage();
-        ASSERT(PfnNumber != PFN_INVALID);
+        KIRQL Irql;
+        KeAcquireSpinLock(&MmPfndbLock, &Irql);
+        MMPFN *Pfn = MmPopFromFreelist(&MmpFreeListHead, &MmpFreeListTail);
+        KeReleaseSpinLock(&MmPfndbLock, Irql);
+        if (Pfn == NULL) break;
 
+        PFN_NUMBER PfnNumber = MmGetPfnNumber(Pfn);
         UINT_PTR Hhdm = MiConvertToHhdm(MmConvertPfnToPhys(PfnNumber));
         RtlZeroMemory((VOID*)Hhdm, PAGE_SIZE);
 
-        MMPFN *Pfn = &MmPfnDatabase[PfnNumber];
+        KeAcquireSpinLock(&MmPfndbLock, &Irql);
         Pfn->Type = PFN_TYPE_ZEROED;
-        Pfn->RefCount = 0;
-
         MmAddToFreelist(&MmpZeroFreeListHead, &MmpZeroFreeListTail, Pfn);
+        KeReleaseSpinLock(&MmPfndbLock, Irql);
     }
 }
 
@@ -292,6 +250,7 @@ OS_STATUS MiInitializePfnDatabase() {
             PFN_NUMBER PfnNumber = MmConvertPhysToPfn(j);
             MMPFN *Pfn = &MmPfnDatabase[PfnNumber];
 
+            MmTotalPhysicalMemory += PAGE_SIZE;
             if (Region->Type != LOADER_MEMORY_AVAIL) {
                 Pfn->Type = PFN_TYPE_ALLOCATED;
                 Pfn->RefCount = 1;
@@ -305,7 +264,6 @@ OS_STATUS MiInitializePfnDatabase() {
                 MmAddToFreelist(&MmpFreeListHead, &MmpFreeListTail, Pfn);
             }
 
-            MmTotalPhysicalMemory += PAGE_SIZE;
         }
     }
 

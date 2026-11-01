@@ -60,6 +60,12 @@ volatile struct limine_module_request KeLimineModuleRequest = {
     .revision = 0
 };
 
+volatile struct limine_rsdp_request KeLimineRsdpRequest = {
+    .id = LIMINE_RSDP_REQUEST,
+    .response = NULL,
+    .revision = 0
+};
+
 /* HHDM */
 #define TO_HHDM(x) (VOID*)(KeLimineHhdmRequest.response->offset + (x))
 
@@ -185,6 +191,12 @@ VOID KeInitLoaderParameterBlock() {
     }
 
     KeLoaderParameterBlock->Framebuffers = LpbFramebuffers;
+
+    if (KeLimineRsdpRequest.response != NULL) {
+        KeLoaderParameterBlock->Machine.Rsdp = (UINT_PTR)KeLimineRsdpRequest.response->address;
+    } else {
+        KeLoaderParameterBlock->Machine.Rsdp = 0x0;
+    }
 }
 
 VOID KeSystemStartup() {

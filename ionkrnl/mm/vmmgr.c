@@ -227,7 +227,14 @@ static MM_ARENA_NODE *MmFindContainingFreeRange(MM_ARENA *Arena, PFN_NUMBER Star
     return NULL;
 }
 
-static OS_STATUS MmAllocateArenaAt(MM_ARENA *Arena, PFN_NUMBER StartPage, SIZE_T NumPages, MM_ARENA_NODE **Spare, MM_ARENA_NODE **Removed) {
+static OS_STATUS MmAllocateArenaAt(
+    MM_ARENA *Arena,
+    PFN_NUMBER StartPage,
+    SIZE_T NumPages,
+    MM_ARENA_NODE **Spare,
+    MM_ARENA_NODE **Removed,
+    MM_ARENA_NODE **Allocation
+) {
     MM_ARENA_NODE *Node = MmFindContainingFreeRange(Arena, StartPage, NumPages);
     if (!Node) {
         return STATUS_NO_MEMORY;
@@ -259,6 +266,12 @@ static OS_STATUS MmAllocateArenaAt(MM_ARENA *Arena, PFN_NUMBER StartPage, SIZE_T
         *Spare = NULL;
         MmInsertBst(Arena, NewNode);
     }
+
+    MM_ARENA_NODE *NewAllocation = *Allocation;
+    NewAllocation->StartPfn = StartPage;
+    NewAllocation->NumPages = NumPages;
+    NewAllocation->NextAllocation = Arena->Allocations;
+    Arena->Allocations = NewAllocation;
 
     return STATUS_SUCCESS;
 }
@@ -329,9 +342,11 @@ OS_STATUS MiInitializeKernelArena() {
     InitializeListHead(&ArenaPartialPages);
 
     KeInitializeSpinLock(&MmKernelArena->SpinLock);
+    MmKernelArena->AddressSpace = MmKernelAddressSpace;
     MmKernelArena->Base = MM_KERNEL_START;
     MmKernelArena->TotalPages = (MM_KERNEL_END - MM_KERNEL_START) / PAGE_SIZE;
     MmKernelArena->Root = NULL;
+    MmKernelArena->Allocations = NULL;
 
     // Need to initialize the base free area
     MM_ARENA_NODE *Node = MmAllocateArenaNode();
@@ -364,7 +379,8 @@ OS_STATUS MmAllocateVirtualPagesArenaEx(
     }
 
     BOOLEAN Fixed = !!(Flags & MM_ALLOC_FIXED);
-    if (Fixed && (AddressHint == NULL || AddressHint < Arena->Base || AddressHint >= Arena->Base + (Arena->TotalPages*PAGE_SIZE))) {
+    if (Fixed && (AddressHint == NULL || (UINT_PTR)AddressHint < Arena->Base ||
+        (UINT_PTR)AddressHint >= Arena->Base + (Arena->TotalPages * PAGE_SIZE))) {
         return STATUS_INVALID_PARAMETER;
     }
 
@@ -377,6 +393,7 @@ OS_STATUS MmAllocateVirtualPagesArenaEx(
     // On initialization this spare node is practically guranteed to be used since the entire range is one
     // big block, and only under severe fragmentation does freeing become a challenge.
     MM_ARENA_NODE *SpareNode = MmAllocateArenaNode();
+    MM_ARENA_NODE *AllocationNode = MmAllocateArenaNode();
     MM_ARENA_NODE *Removed = NULL;
 
     // Lock the arena
@@ -415,8 +432,14 @@ OS_STATUS MmAllocateVirtualPagesArenaEx(
         StartPage,
         NumPages,
         &SpareNode,
-        &Removed
+        &Removed,
+        &AllocationNode
     );
+
+    if (OS_SUCCESS(Status)) {
+        AllocationNode->Backed = !(Flags & MM_ALLOC_UNBACKED);
+        __atomic_store_n(&AllocationNode->Ready, FALSE, __ATOMIC_RELAXED);
+    }
 
 _Exit:
     KeReleaseSpinLock(&Arena->SpinLock, Irql);
@@ -429,6 +452,10 @@ _Exit:
         MmFreeArenaNode(SpareNode);
     }
 
+    if (!OS_SUCCESS(Status) && AllocationNode != NULL) {
+        MmFreeArenaNode(AllocationNode);
+    }
+
     if (!OS_SUCCESS(Status)) {
         return Status;
     }
@@ -438,6 +465,7 @@ _Exit:
 
     // If the allocation is unbacked, finish now.
     if ((Flags & MM_ALLOC_UNBACKED)) {
+        __atomic_store_n(&AllocationNode->Ready, TRUE, __ATOMIC_RELEASE);
         return STATUS_SUCCESS;
     }
 
@@ -451,68 +479,75 @@ _Exit:
             Frame = MmAllocatePhysicalPageZeroed();
         }
 
-        MmuMapPage(
-            MmuCurrentPageTable(),
+        Status = MmuMapPage(
+            Arena->AddressSpace,
             i,
             MmConvertPfnToPhys(Frame),
             Protection
         );
 
-        // The virtual address may still have a translation from an earlier allocation.
-        MmuInvalidateRange(i, 1);
+        if (!OS_SUCCESS(Status)) {
+            MmFreePhysicalPage(Frame);
+            KeBugCheckWithStatus(Status, "Arena range already has a mapping");
+        }
     }
 
+    __atomic_store_n(&AllocationNode->Ready, TRUE, __ATOMIC_RELEASE);
     return STATUS_SUCCESS;
 }
 
 
-// WARNING: YOU MUST ONLY CALL MmFreeVirtualPagesArena WITH BACKED MEMORY
-// IT WILL FREE THE BACKED MEMORY!
 OS_STATUS MmFreeVirtualPagesArena(
     MM_ARENA *Arena,
     VOID *Address,
     SIZE_T NumPages
 )
 {
-    if ((UINT_PTR)Address & (PAGE_SIZE-1)) {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    if ((UINT_PTR)Address < Arena->Base) {
-        return STATUS_INVALID_PARAMETER;
-    }
-
     PFN_NUMBER StartPage = MmConvertPhysToPfn((UINT_PTR)Address - Arena->Base);
-    if (StartPage + NumPages > Arena->TotalPages) {
+
+    MM_ARENA_NODE *SpareNode = NULL;
+    MM_ARENA_NODE *RemovedNode = NULL;
+
+    // Lock the arena
+    KIRQL Irql;
+    OS_STATUS Status;
+    KeAcquireSpinLock(&Arena->SpinLock, &Irql);
+
+    // Find the linking node
+    MM_ARENA_NODE **Link = &Arena->Allocations;
+    while (*Link && ((*Link)->StartPfn != StartPage || (*Link)->NumPages != NumPages)) {
+        Link = &(*Link)->NextAllocation;
+    }
+
+    if (*Link == NULL || !__atomic_load_n(&(*Link)->Ready, __ATOMIC_ACQUIRE)) {
+        // These pages are not able to be freed
+        KeReleaseSpinLock(&Arena->SpinLock, Irql);
         return STATUS_INVALID_PARAMETER;
     }
 
-    // !!! This is bad and its worse than MmAllocateVirtualPagesArenaEx
-    // Most of the time, a free range can be merged into a previous range
-    // It's possible to make this better by having a retry functionality, where
-    // MmFreeArenaAt returns a magic status that signals for us to do allocation.
-    MM_ARENA_NODE *SpareNode = MmAllocateArenaNode();
-    MM_ARENA_NODE *RemovedNode = NULL;
-    
-    // Free all backed memory now
-    UINT_PTR PageTable = MmuCurrentPageTable();
+    SpareNode = *Link;
+    *Link = SpareNode->NextAllocation;
+
+    // Remove the pages from the VM list first before freeing them
+    BOOLEAN Backed = SpareNode->Backed;
+    Status = MmFreeArenaAt(Arena, StartPage, NumPages, &SpareNode, &RemovedNode);
+    if (!OS_SUCCESS(Status)) {
+        MM_ARENA_NODE *Allocation = SpareNode;
+        Allocation->NextAllocation = Arena->Allocations;
+        Arena->Allocations = Allocation;
+        KeReleaseSpinLock(&Arena->SpinLock, Irql);
+        return Status;
+    }
+
+    // Now release the pages, unbacking them if needed
     for (UINT_PTR i = (UINT_PTR)Address; i < (UINT_PTR)Address + NumPages * PAGE_SIZE; i += PAGE_SIZE) {
-        UINT_PTR Frame = MmuGetPhysicalAddress(PageTable, i);
-        MmuUnmapPage(PageTable, i);
-        if (Frame != 0x0) {
+        UINT_PTR Frame;
+        BOOLEAN Present = MmuUnmapPage(Arena->AddressSpace, i, &Frame);
+        if (Backed && Present) {
             MmFreePhysicalPage(MmConvertPhysToPfn(Frame));
         }
     }
 
-    // TLB invalidation
-    // TODO: Replace with call to MmInvalidate when ready
-    MmuInvalidateRange((UINT_PTR)Address, NumPages);
-
-    // Free the vmem back to the arena
-    KIRQL Irql;
-    OS_STATUS Status;
-    KeAcquireSpinLock(&Arena->SpinLock, &Irql);
-    Status = MmFreeArenaAt(Arena, StartPage, NumPages, &SpareNode, &RemovedNode);
     KeReleaseSpinLock(&Arena->SpinLock, Irql);
 
     if (SpareNode) {

@@ -14,9 +14,14 @@
 #include <ion/rtl.h>
 #include <ion/hal.h>
 #include <ion/ion.h>
+#include <ion/ke/ps.h>
 
 /* Primary vtable */
 static HAL_VTABLE *HalpVtable = NULL;
+
+IONAPI VOID HalTimerInterrupt() {
+    return;
+}
 
 IONAPI VOID HalSetVtable(HAL_VTABLE *Vtable) {
     HalpVtable = Vtable;
@@ -27,8 +32,8 @@ IONHALAPI VOID HalPrintString(const CHAR* String) {
     return HalpVtable->PrintString(String);
 }
 
-IONHALAPI OS_STATUS HalInitSystemConsole() {
-    return HalpVtable->InitSystemConsole();
+IONHALAPI OS_STATUS HalInitializeHardware() {
+    return HalpVtable->InitializeHardware();
 }
 
 IONHALAPI VOID HalConsolePrintf(const CHAR* Format, ...) {

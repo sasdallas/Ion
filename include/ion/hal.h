@@ -16,7 +16,7 @@
 #include <ion/base.h>
 
 IONHALAPI VOID HalPrintString(const CHAR* String);
-IONHALAPI OS_STATUS HalInitSystemConsole();
 IONHALAPI VOID HalConsolePrintf(const CHAR* Format, ...);
+IONHALAPI OS_STATUS HalInitializeHardware();
 
 #endif

@@ -17,8 +17,6 @@
 #include <ion/rtl/dbg.h>
 #include <ion/ke/ke_types.h>
 
-typedef UCHAR KIRQL;
-
 typedef struct _TRAP_FRAME {
     UINT64 Cr2;
     UINT64 R8, R9, R10, R11, R12, R13, R14, R15;
@@ -69,6 +67,31 @@ FORCE_INLINE THREAD *KeGetCurrentThread() {
     THREAD *Thread;
     asm volatile ("mov %%gs:%c1, %0" : "=r" (Thread) : "i"(FIELD_OFFSET(KCPU, CurrentThread)));
     return Thread;
+}
+
+FORCE_INLINE BOOLEAN KeSetInterruptState(BOOLEAN InterruptState) {
+    UINT64 Rflags;
+    asm volatile (  "pushf\n"
+                    "pop %0" : "=rm"(Rflags)
+    );
+
+    if (InterruptState) {
+        asm volatile ("sti");
+    } else {
+        asm volatile ("cli");
+    }
+
+    return !!(Rflags & (1 << 9));
+}
+
+FORCE_INLINE VOID KeHardwareUpdateIrql(KIRQL NewIrql) {
+    asm volatile ("mov %0, %%cr8" :: "r"((UINT64)NewIrql));
+}
+
+FORCE_INLINE unsigned long long __readmsr(const int Reg) {
+    UINT32 Low, High;
+    asm volatile ("rdmsr" : "=a"(Low), "=d"(High) : "c"(Reg));
+    return ((UINT64)High << 32) | Low;
 }
 
 #endif

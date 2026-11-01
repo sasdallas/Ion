@@ -23,6 +23,7 @@
 
 #include <ion/ke/ps/process.h>
 #include <ion/ke/ps/thread.h>
+#include <ion/ke/ps/scheduler.h>
 #include <ion/ke/ob.h>
 
 extern PROCESS *PsSystemProcess;
@@ -31,10 +32,14 @@ extern OBJECT_TYPE *PsProcessObjectType;
 extern OBJECT_TYPE *PsThreadObjectType;
 
 IONAPI PROCESS *PsGetCurrentProcess();
+IONAPI OS_STATUS PsCreateThread(PROCESS *Process, VOID (*StartRoutine)(VOID *Context), VOID *Context, THREAD **ThreadOutput);
 IONAPI VOID PsYieldThread();
+IONAPI VOID PsReadyThread(THREAD *Thread);
+IONAPI VOID PsTickScheduler();
 IONAPI NO_RETURN VOID PsExitThread();
 
 OS_STATUS PsInitialize();
 OS_STATUS PsInitializeSystemProcess();
+OS_STATUS PsInitializeScheduler();
 
 #endif

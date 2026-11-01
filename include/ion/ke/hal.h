@@ -16,10 +16,11 @@
 #include <ion/base.h>
 
 typedef struct _HAL_VTABLE {
-    OS_STATUS (*InitSystemConsole)();
+    OS_STATUS (*InitializeHardware)();
     VOID (*PrintString)(const CHAR* String);
 } HAL_VTABLE;
 
 IONAPI VOID HalSetVtable(HAL_VTABLE *Vtable);
+IONAPI VOID HalTimerInterrupt();
 
 #endif

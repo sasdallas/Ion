@@ -32,6 +32,7 @@ typedef LONG OS_STATUS;
 #define STATUS_INVALID_IMAGE            __ERROR(0x4)
 #define STATUS_DLL_NOT_FOUND            __ERROR(0x5)
 #define STATUS_ENTRYPOINT_NOT_FOUND     __ERROR(0x6)
+#define STATUS_NOT_FOUND                __ERROR(0x7)
 
 #define STATUS_FORMAT   "0x%08x"
 

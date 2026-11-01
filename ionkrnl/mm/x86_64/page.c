@@ -16,12 +16,47 @@
 
 extern UINT8 __ImageBase, __ImageEnd;
 
-typedef struct { MMPTE Entries[512]; } PACKED PML;
+typedef struct { MMPTE Entries[512]; } PML;
+
+/* Kernel address space */
+static MM_ADDRESS_SPACE __MmKernelAddressSpace;
+MM_ADDRESS_SPACE *MmKernelAddressSpace = &__MmKernelAddressSpace;
+
+// WB, WT, UC-, UC, WB, WT, UC-, UC
+#define MM_IA32_PAT 0x0007040600070406ULL
+
+static VOID MiInitalizePat() {
+    BOOLEAN Restore = KeSetInterruptState(FALSE);
+    
+    // disable NW and enable CD on CR0 to disable caching
+    UINT64 Cr0;
+    asm volatile ("mov %%cr0, %0" : "=r"(Cr0));
+    UINT64 UncachedCr0 = (Cr0 | BIT(30)) & ~BIT(29);
+    asm volatile ("mov %0, %%cr0" :: "r"(UncachedCr0) : "memory");
+    asm volatile ("wbinvd" ::: "memory");
+
+    // prepare the PAT
+    UINT_PTR Cr3 = (UINT_PTR)MmuCurrentPageTable();
+    asm volatile ("mov %0, %%cr3" :: "r"(Cr3) : "memory");
+    asm volatile ("wrmsr" :: "c"(0x277), "a"((UINT32)MM_IA32_PAT), "d"((UINT32)(MM_IA32_PAT >> 32)) : "memory");
+
+    // reset cr3 + cr0
+    asm volatile ("wbinvd" ::: "memory");
+    asm volatile ("mov %0, %%cr3" :: "r"(Cr3) : "memory");
+    asm volatile ("mov %0, %%cr0" :: "r"(Cr0) : "memory");
+    KeSetInterruptState(Restore);
+}
+
+OS_STATUS MiInitializeKernelAddressSpace() {
+    __MmKernelAddressSpace.PageTable = MmuCurrentPageTable();
+    KeInitializeSpinLock(&__MmKernelAddressSpace.Lock);
+    return STATUS_SUCCESS;
+}
 
 // Function to map a page at an address for early allocation
 VOID MiMapPageAtAddressEarly(UINT_PTR Address) {
-    UINT_PTR PageTable = MmuCurrentPageTable();
-    PML* Pml = (PML*)MiConvertToHhdm(PageTable);
+    MM_PAGETBL *PageTable = MmuCurrentPageTable();
+    PML* Pml = (PML*)MiConvertToHhdm((UINT_PTR)PageTable);
 
     UINT_PTR Levels[4] = {
         (Address >> 39) & 0x1FF, // PML4
@@ -56,13 +91,9 @@ VOID MiMapPageAtAddressEarly(UINT_PTR Address) {
     }
 }
 
-static MMPTE* MmuGetPage(UINT_PTR PageTable, UINT_PTR VirtualAddress, BOOLEAN AllocatePage) {
-    if (PageTable == 0x0) {
-        PageTable = MmuCurrentPageTable();
-    }
-
+static MMPTE* MmuGetPage(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, BOOLEAN AllocatePage) {
     // TODO: Use recursive paging
-    PML* Pml = (PML*)MiConvertToHhdm(PageTable);
+    PML* Pml = (PML*)MiConvertToHhdm((UINT_PTR)AddressSpace->PageTable);
 
     UINT_PTR Levels[4] = {
         (VirtualAddress >> 39) & 0x1FF, // PML4
@@ -96,37 +127,69 @@ static MMPTE* MmuGetPage(UINT_PTR PageTable, UINT_PTR VirtualAddress, BOOLEAN Al
     return &Pml->Entries[Levels[3]];
 }
 
-VOID MmuMapPage(UINT_PTR PageTable, UINT_PTR VirtualAddress, UINT_PTR PhysicalAddress, UINT Protection) {
-    MMPTE *Pte = MmuGetPage(PageTable, VirtualAddress, TRUE);
-    UINT PteFlags = MM_PTE_PRESENT;
+OS_STATUS MmuMapPageEx(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, UINT_PTR PhysicalAddress, UINT Protection, MM_CACHING_TYPE CacheType) {
+    KIRQL Irql;
+    KeAcquireSpinLock(&AddressSpace->Lock, &Irql);
+
+    MMPTE *Pte = MmuGetPage(AddressSpace, VirtualAddress, TRUE);
+
+    MMPTE PteFlags = MM_PTE_PRESENT;
     if (Protection & MM_PROT_WRITE) PteFlags |= MM_PTE_WRITABLE;
     if ((Protection & MM_PROT_EXEC) == 0) PteFlags |= MM_PTE_NX;
+    if (CacheType == MmCacheUncached) PteFlags |= MM_PTE_PWT | MM_PTE_PCD;
 
     *(Pte) = (PhysicalAddress & MM_PTE_ADDR_MASK) | PteFlags;
-}
 
-VOID MmuUnmapPage(UINT_PTR PageTable, UINT_PTR VirtualAddress) {
-    MMPTE *Pte = MmuGetPage(PageTable, VirtualAddress, FALSE);
-    if (Pte == NULL) return;
-    *Pte = 0;
-}
-
-UINT_PTR MmuGetPhysicalAddress(UINT_PTR PageTable, UINT_PTR VirtualAddress) {
-    if (PageTable == 0) {
-        PageTable = MmuCurrentPageTable();
+    if (AddressSpace->PageTable == MmuCurrentPageTable()) {
+        asm volatile ("invlpg (%0)" :: "r"(VirtualAddress) : "memory");
     }
 
-    PML *Pml = (PML*)MiConvertToHhdm(PageTable);
+    KeReleaseSpinLock(&AddressSpace->Lock, Irql);
+    return STATUS_SUCCESS;
+}
+
+BOOLEAN MmuUnmapPage(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, UINT_PTR *PhysicalAddress) {
+    KIRQL Irql;
+    KeAcquireSpinLock(&AddressSpace->Lock, &Irql);
+    MMPTE *Pte = MmuGetPage(AddressSpace, VirtualAddress, FALSE);
+    if (Pte == NULL || !(*Pte & MM_PTE_PRESENT)) {
+        KeReleaseSpinLock(&AddressSpace->Lock, Irql);
+        return FALSE;
+    }
+
+    if (PhysicalAddress != NULL) {
+        *PhysicalAddress = *Pte & MM_PTE_ADDR_MASK;
+    }
+
+    // zero the PTE
+    *Pte = 0;
+
+    if (AddressSpace->PageTable == MmuCurrentPageTable()) {
+        asm volatile ("invlpg (%0)" :: "r"(VirtualAddress) : "memory");
+    }
+
+    KeReleaseSpinLock(&AddressSpace->Lock, Irql);
+    return TRUE;
+}
+
+UINT_PTR MmuGetPhysicalAddress(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress) {
+    KIRQL Irql;
+    KeAcquireSpinLock(&AddressSpace->Lock, &Irql);
+
+    PML *Pml = (PML*)MiConvertToHhdm((UINT_PTR)AddressSpace->PageTable);
     for (INT Level = 3; Level > 0; Level--) {
         UINT_PTR Index = (VirtualAddress >> (PAGE_SHIFT + Level * 9)) & 0x1FF;
         MMPTE Entry = Pml->Entries[Index];
         if ((Entry & MM_PTE_PRESENT) == 0) {
+            KeReleaseSpinLock(&AddressSpace->Lock, Irql);
             return 0;
         }
 
         if (Entry & MM_PTE_PS) {
             UINT_PTR PageSize = 1ULL << (PAGE_SHIFT + Level * 9);
-            return (Entry & MM_PTE_ADDR_MASK & ~(PageSize - 1)) | (VirtualAddress & (PageSize - 1));
+            UINT_PTR Physical = (Entry & MM_PTE_ADDR_MASK & ~(PageSize - 1)) | (VirtualAddress & (PageSize - 1));
+            KeReleaseSpinLock(&AddressSpace->Lock, Irql);
+            return Physical;
         }
 
         Pml = (PML*)MiConvertToHhdm(Entry & MM_PTE_ADDR_MASK);
@@ -134,45 +197,33 @@ UINT_PTR MmuGetPhysicalAddress(UINT_PTR PageTable, UINT_PTR VirtualAddress) {
 
     MMPTE Entry = Pml->Entries[(VirtualAddress >> PAGE_SHIFT) & 0x1FF];
     if ((Entry & MM_PTE_PRESENT) == 0) {
+        KeReleaseSpinLock(&AddressSpace->Lock, Irql);
         return 0;
     }
 
-    return (Entry & MM_PTE_ADDR_MASK) | (VirtualAddress & (PAGE_SIZE - 1));
+    UINT_PTR Physical = (Entry & MM_PTE_ADDR_MASK) | (VirtualAddress & (PAGE_SIZE - 1));
+    KeReleaseSpinLock(&AddressSpace->Lock, Irql);
+    return Physical;
 }
 
 OS_STATUS MiMapFramebuffers() {
     for (SIZE_T i = 0; i < KeLoaderParameterBlock->NrFramebuffers; i++) {
         LOADER_FRAMEBUFFER *Framebuffer = &KeLoaderParameterBlock->Framebuffers[i];
-
-        UINT_PTR Offset = Framebuffer->Address & (PAGE_SIZE - 1);
-        SIZE_T NrPages = (Offset + Framebuffer->Size + PAGE_SIZE - 1) / PAGE_SIZE;
-        UINT_PTR OldBase = Framebuffer->Address - Offset;
-
-        VOID *NewBase = MmAllocateVirtualPagesArena(
-            MmKernelArena,
-            NULL,
-            NrPages,
-            MM_ALLOC_UNBACKED,
-            MM_PROT_READ | MM_PROT_WRITE
-        );
-
-        if (NewBase == NULL) {
-            return STATUS_NO_MEMORY;
-        }
-
-        for (SIZE_T Page = 0; Page < NrPages; Page++) {
-            UINT_PTR Physical = MmuGetPhysicalAddress(0, OldBase + Page * PAGE_SIZE);
-            MmuMapPage(0, (UINT_PTR)NewBase + Page * PAGE_SIZE, Physical, MM_PROT_READ | MM_PROT_WRITE);
-        }
-
-        MmuInvalidateRange((UINT_PTR)NewBase, NrPages);
-        Framebuffer->Address = (UINT_PTR)NewBase + Offset;
+        UINT_PTR Physical = MmuGetPhysicalAddress(MmKernelAddressSpace, Framebuffer->Address);
+        VOID *Mapping = MmMapIoSpace(Physical, Framebuffer->Size, MmCacheUncached);
+        if (Mapping == NULL) return STATUS_NO_MEMORY;
+        Framebuffer->Address = (UINT_PTR)Mapping;
     }
 
     return STATUS_SUCCESS;
 }
 
-VOID MmuInvalidateRange(UINT_PTR Start, SIZE_T NumPages) {
+VOID MmuSetAddressSpace(MM_ADDRESS_SPACE *AddressSpace) {
+    asm volatile ("movq %0, %%cr3" :: "r"(AddressSpace->PageTable) : "memory");
+}
+
+VOID MmuInvalidateRange(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR Start, SIZE_T NumPages) {
+    if (AddressSpace->PageTable != MmuCurrentPageTable()) return;
     if (NumPages > 16) {
         // reload cr3 instead, its faster
         asm volatile ("movq %%cr3, %%rax\n"

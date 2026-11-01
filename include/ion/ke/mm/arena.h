@@ -18,6 +18,7 @@
 #include <ion/base.h>
 #include <ion/ke/mm/pfn.h>
 #include <ion/ke/ke_types.h>
+#include <ion/ke/mm/addrspace.h>
 
 typedef struct _MM_ARENA_NODE {
     PFN_NUMBER StartPfn;
@@ -26,16 +27,21 @@ typedef struct _MM_ARENA_NODE {
     struct _MM_ARENA_NODE *Left;
     struct _MM_ARENA_NODE *Right;
     struct _MM_ARENA_NODE *Parent;
+    struct _MM_ARENA_NODE *NextAllocation;
+    BOOLEAN Backed;
+    _Atomic BOOLEAN Ready;
 } MM_ARENA_NODE;
 
 typedef struct _MM_ARENA {
     KSPIN_LOCK SpinLock;
+    MM_ADDRESS_SPACE *AddressSpace;
     UINT_PTR Base;
     SIZE_T TotalPages;
     MM_ARENA_NODE *Root;
     MM_ARENA_NODE *Leftmost;
+    MM_ARENA_NODE *Allocations;
 } MM_ARENA;
 
-extern MM_ARENA *MmKernelArena;
+extern IONAPI MM_ARENA *MmKernelArena;
 
 #endif

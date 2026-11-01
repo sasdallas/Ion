@@ -38,7 +38,7 @@ typedef struct _MM_HEAP {
     MM_HEAP_TYPE Type;
 } MM_HEAP;
 
-extern MM_HEAP* MmPagedHeap;
-extern MM_HEAP* MmNonpagedHeap;
+extern IONAPI MM_HEAP* MmPagedHeap;
+extern IONAPI MM_HEAP* MmNonpagedHeap;
 
 #endif

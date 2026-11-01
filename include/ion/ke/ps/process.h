@@ -15,12 +15,21 @@
 
 #include <ion/base.h>
 #include <ion/list.h>
+#include <ion/ke/mm/addrspace.h>
 
 typedef ULONG PROCESS_ID;
 
 typedef struct _PROCESS {
+    KSPIN_LOCK Spinlock;
     PROCESS_ID Pid;
+    LIST_ENTRY ProcessListEntry;
+
+    MM_ADDRESS_SPACE *AddressSpace;
+
     LIST_ENTRY ThreadList;
+    ULONG ThreadCount;
+
+    CHAR ImageName[32];
 } PROCESS;
 
 #endif

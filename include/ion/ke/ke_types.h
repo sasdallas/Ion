@@ -15,15 +15,23 @@
 
 #include <ion/base.h>
 #include <ion/ke/ps/thread.h>
-#include <ion/ke/ke/processor_mode.h>
 
-typedef UINT_PTR KSPIN_LOCK;
+#include <ion/ke/ke/processor_mode.h>
+#include <ion/ke/ke/irql.h>
+#include <ion/ke/ke/lock.h>
+#include <ion/ke/ke/semaphore.h>
+#include <ion/ke/ke/priority.h>
+
+#include <ion/ke/ps/scheduler.h>
 
 typedef struct _KCPU {
     struct _KCPU *Self;
     UINT32 HardwareId;
     UINT32 LogicalId; // assigned by the kernel
+    KIRQL Irql;
     THREAD *CurrentThread;
+    THREAD *NextThread;
+    SCHEDULER Scheduler;
 } KCPU;
 
 #endif

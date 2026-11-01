@@ -53,6 +53,16 @@ typedef struct _LOADER_FRAMEBUFFER {
     UCHAR BlueMaskShift;
 } LOADER_FRAMEBUFFER;
 
+#ifdef __x86_64__
+
+typedef struct _MACHINE_LOADER_BLOCK {
+    UINT_PTR Rsdp;
+} MACHINE_LOADER_BLOCK;
+
+#else
+#error implement MACHINE_LOADER_BLOCK for your architecture
+#endif
+
 typedef struct _LOADER_PARAMETER_BLOCK {
     LOADER_MEMORY_REGION *MemoryRegions;
     SIZE_T NrMemoryRegions;
@@ -63,6 +73,8 @@ typedef struct _LOADER_PARAMETER_BLOCK {
 
     LOADER_FRAMEBUFFER *Framebuffers;
     SIZE_T NrFramebuffers;
+
+    MACHINE_LOADER_BLOCK Machine;
 } LOADER_PARAMETER_BLOCK;
 
 #endif

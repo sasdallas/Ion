@@ -26,6 +26,7 @@
 #include <ion/ke/mm/arena.h>
 #include <ion/ke/mm/pool.h>
 #include <ion/ke/mm/heap.h>
+#include <ion/ke/mm/addrspace.h>
 
 // Flags
 #define MM_ALLOC_FIXED          0x01    // The allocation being requested is fixed at AddressHint, and should fail otherwise
@@ -37,6 +38,11 @@
 #define MM_PROT_READ            0x01
 #define MM_PROT_WRITE           0x02
 #define MM_PROT_EXEC            0x04
+
+typedef enum _MM_CACHING_TYPE {
+    MmCacheWriteBack,
+    MmCacheUncached,
+} MM_CACHING_TYPE;
 
 // Heap flags
 #define HEAP_FLAG_DEFAULT       0x00
@@ -66,24 +72,33 @@ FORCE_INLINE UINT_PTR MmPageAlignDown(UINT_PTR Address) {
     return (Address & ~(PAGE_SIZE-1));
 }
 
-extern SIZE_T MmTotalPhysicalMemory;    // The actual amount of memory installed in the system
+extern SIZE_T MmTotalPhysicalMemory;    // Memory managed by the kernel
 extern SIZE_T MmUsedPhysicalMemory;
 
 /* Mi: Memory initialization */
 OS_STATUS MiInitializePfnDatabase();
+OS_STATUS MiInitializeKernelAddressSpace();
 OS_STATUS MiInitializeKernelArena();
 OS_STATUS MiInitializePoolManager();
 OS_STATUS MiInitializeKernelHeaps();
 OS_STATUS MiUnmarkUsedMemory();
 OS_STATUS MiMapFramebuffers();
 UINT_PTR MiAllocatePageFromMemoryMap();
-UINT_PTR MiConvertToHhdm(UINT_PTR Address);
 
-/* Mmu: Memory manager unit */
-VOID MmuMapPage(UINT_PTR PageTable, UINT_PTR VirtualAddress, UINT_PTR PhysicalAddress, UINT Protection);
-VOID MmuUnmapPage(UINT_PTR PageTable, UINT_PTR VirtualAddress);
-VOID MmuInvalidateRange(UINT_PTR Start, SIZE_T NumPages);
-UINT_PTR MmuGetPhysicalAddress(UINT_PTR PageTable, UINT_PTR VirtualAddress);
+/* TODO: THIS SHOULD NOT BE AN IONAPI */
+IONAPI UINT_PTR MiConvertToHhdm(UINT_PTR Address);
+
+/* Mmu: Memory management unit */
+OS_STATUS MmuMapPageEx(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, UINT_PTR PhysicalAddress, UINT Protection, MM_CACHING_TYPE CacheType);
+
+FORCE_INLINE OS_STATUS MmuMapPage(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, UINT_PTR PhysicalAddress, UINT Protection) {
+    return MmuMapPageEx(AddressSpace, VirtualAddress, PhysicalAddress, Protection, MmCacheWriteBack);
+}
+
+BOOLEAN MmuUnmapPage(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress, UINT_PTR *PhysicalAddress);
+VOID MmuInvalidateRange(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR Start, SIZE_T NumPages);
+UINT_PTR MmuGetPhysicalAddress(MM_ADDRESS_SPACE *AddressSpace, UINT_PTR VirtualAddress);
+VOID MmuSetAddressSpace(MM_ADDRESS_SPACE *AddressSpace);
 
 /* Mm: Memory management */
 PFN_NUMBER MmAllocatePhysicalPage();
@@ -102,6 +117,9 @@ OS_STATUS MmAllocateVirtualPagesArenaEx(
 );
 
 OS_STATUS MmFreeVirtualPagesArena(MM_ARENA *Arena, VOID *Address, SIZE_T NumPages);
+
+IONAPI VOID *MmMapIoSpace(UINT_PTR PhysicalAddress, SIZE_T NumberOfBytes, MM_CACHING_TYPE CacheType);
+IONAPI VOID MmUnmapIoSpace(VOID *BaseAddress, SIZE_T NumberOfBytes);
 
 FORCE_INLINE OS_STATUS MmReserveKernelVirtualPages(VOID *Address, SIZE_T NumPages) {
     VOID *Garbage;

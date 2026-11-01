@@ -16,6 +16,8 @@
 #include <ion/base.h>
 #include <ion/list.h>
 
+#include <ion/ke/ps/scheduler.h>
+
 // TODO Fix these weird header dependencies
 #ifdef __x86_64__
 #include <ion/ke/x86_64/ps.h>
@@ -29,6 +31,7 @@ struct _THREAD_CONTEXT;
 typedef enum _THREAD_STATE {
     PsThreadInitialized,            // Thread is created but not yet ready to run
     PsThreadReady,                  // Thread is sitting in a scheduler queue
+    PsThreadStandby,                // We up
     PsThreadRunning,                // Thread is executing now
     PsThreadTerminated,             // DEAD!
     PsThreadWaiting,                // Waiting on some resource
@@ -37,16 +40,14 @@ typedef enum _THREAD_STATE {
 typedef ULONG THREAD_ID;
 
 typedef struct _THREAD {
+    KSPIN_LOCK Spinlock;
     THREAD_ID ThreadId;
     THREAD_STATE ThreadState;
 
     struct _PROCESS *Process;
     LIST_ENTRY ProcEntry;
 
-    struct {
-        UINT8 Priority;
-        UINT32 QuantumRemaining;
-    } Schedule;
+    THREAD_SCHEDULE Schedule;
 
     struct _THREAD_CONTEXT Context;
     VOID *KernelStack;

@@ -3,6 +3,8 @@ list(APPEND __KE_SOURCE
                     ke/init.c
                     ke/bugcheck.c
                     ke/trap.c
+                    ke/irql.c
+                    ke/semaphore.c
 )
 
 if (ARCH STREQUAL "x86_64")
@@ -19,6 +21,7 @@ endif()
 list(APPEND __MM_SOURCE
                     mm/pfndb.c
                     mm/vmmgr.c
+                    mm/iospace.c
                     mm/pool.c
                     mm/heap.c
 )
@@ -48,6 +51,14 @@ list(APPEND __OB_SOURCE
 
 list(APPEND __PS_SOURCE
                     ps/init.c
+                    ps/sched.c
+                    ps/thread.c
 )
+
+if (ARCH STREQUAL "x86_64")
+    list(APPEND __PS_SOURCE 
+                    ps/x86_64/switch.S
+    )
+endif()
 
 list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE})

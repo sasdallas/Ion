@@ -27,17 +27,31 @@
 extern LOADER_PARAMETER_BLOCK *KeLoaderParameterBlock;
 IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock();
 
-/* Ke functions begin */
+/* Spinlock family */
 IONAPI VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock);
 IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql);
 IONAPI VOID KeReleaseSpinLock(KSPIN_LOCK *SpinLock, KIRQL NewIrql);
 
+/* Initialize */
 NO_RETURN VOID KeInitialize();
 VOID KeInitializeBsp();
 
+/* Bugcheck */
 IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...);
 IONAPI NO_RETURN VOID KeBugCheckTrapFrame(TRAP_FRAME *TrapFrame, const CHAR* Message, ...);
 IONAPI NO_RETURN VOID KeBugCheckWithStatus(OS_STATUS Status, const CHAR* Message, ...);
+
+/* Semaphore family */
+IONAPI VOID KeInitializeSemaphore(KSEMAPHORE *Semaphore, LONG Count, LONG Limit);
+IONAPI LONG KeReleaseSemaphore(KSEMAPHORE *Semaphore, KPRIORITY Boost, LONG Adjustment, BOOLEAN Wait);
+IONAPI BOOLEAN KeTryAcquireSemaphore(KSEMAPHORE *Semaphore);
+
+/* IRQL */
+IONAPI VOID KeRaiseIrql(KIRQL NewIrql, KIRQL *OldIrql);
+IONAPI VOID KeLowerIrql(KIRQL NewIrql);
+
+/* CPU */
+IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*));
 
 // KeOnBsp only safe if scheduling is disabled!!!
 // otherwise you will get switched off. does unsafe KeGetCpu()->LogicalId read

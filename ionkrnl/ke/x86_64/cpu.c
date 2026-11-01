@@ -58,6 +58,12 @@ extern VOID KiVMMCommunicationException(VOID);
 extern VOID KiSecurityException(VOID);
 extern VOID KiReserved2Exception(VOID);
 
+extern UINT_PTR KiTrapTableStart;
+extern UINT_PTR KiTrapTableEnd;
+
+/* IDT handler table */
+VOID* KiHandlerTable[256] = { 0 };
+
 /* GDT table */
 __attribute__((aligned(0x10))) UINT64 KiGdtEntries[] = {
     0x0000000000000000,
@@ -97,13 +103,32 @@ static VOID KiSetInterruptVector(UINT8 Index, UINT64 Handler) {
     KiIdt.Entries[Index].Ist = 0;
 }
 
+static VOID KiEnableSSE() {
+    UINT64 Cr0, Cr4;
+    asm volatile ("mov %%cr0, %0" : "=r"(Cr0));
+    Cr0 = (Cr0 & ~((1ULL << 2) | (1ULL << 3))) | (1ULL << 1);
+    asm volatile ("mov %0, %%cr0" :: "r"(Cr0) : "memory");
+    asm volatile ("mov %%cr4, %0" : "=r"(Cr4));
+    Cr4 |= (1ULL << 9) | (1ULL << 10);
+    asm volatile ("mov %0, %%cr4" :: "r"(Cr4) : "memory");
+    asm volatile ("fninit");
+}
+
 VOID KeInitializeBsp() {
+    // x86_64 has guranteed SSE
+    KiEnableSSE();
+
     // Prepare GDTR and install it
     KiGdtDescriptor.Base = (UINT64)&KiGdtEntries;
     KiGdtDescriptor.Limit = sizeof(KiGdtEntries);
 
     asm volatile (
         "lgdt %0\n"
+        "pushq $0x08\n"
+        "leaq 1f(%%rip), %%rax\n"
+        "pushq %%rax\n"
+        "lretq\n"
+        "1:\n"
         "movw $0x10, %%ax\n"
         "movw %%ax, %%ds\n"
         "movw %%ax, %%es\n"
@@ -143,12 +168,41 @@ VOID KeInitializeBsp() {
     KiSetInterruptVector(30, (UINT64)&KiSecurityException);
     KiSetInterruptVector(31, (UINT64)&KiReserved2Exception);
 
+    // Install common trap tables
+    SIZE_T Entries = ((UINT_PTR)&KiTrapTableEnd - (UINT_PTR)&KiTrapTableStart) / sizeof(UINT_PTR);
+    UINT_PTR *HandlerTable = &KiTrapTableStart;
+    for (SIZE_T i = 0; i < Entries; i++) {
+        KiSetInterruptVector(i + 32, HandlerTable[i]);
+    }
+
+    // IDTR
     KiInstallIdtr();
 
     // Set the BspCpu
     KCPU *Bsp = &BspCpu;
+    BspCpu.Irql = PASSIVE_LEVEL;
     BspCpu.Self = &BspCpu;
     BspCpu.LogicalId = BspCpu.HardwareId = 0;
     asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000102));
     asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000101));
+}
+
+VOID KiCommonTrapDispatcher(TRAP_FRAME *TrapFrame) {
+    VOID (*Handler)(TRAP_FRAME*) = (typeof(Handler))KiHandlerTable[TrapFrame->IntNo];
+    if (Handler == NULL) {
+        KeBugCheckTrapFrame(TrapFrame, "Unhandled interrupt %d", TrapFrame->IntNo);
+    }
+
+    Handler(TrapFrame);    
+}
+
+IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*)) {
+    ASSERT(Vector >= 31);
+
+    if (KiHandlerTable[Vector] != NULL) {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    KiHandlerTable[Vector] = Handler;
+    return STATUS_SUCCESS;
 }

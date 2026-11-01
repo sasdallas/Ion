@@ -14,6 +14,7 @@
 
 .extern KiUnknownTrapHandler
 .extern KiPageFaultHandler
+.extern KiCommonTrapDispatcher
 
 /* Swap GS base */
 .macro _swapgs
@@ -53,7 +54,7 @@
 
 /* Restore registers macro */
 .macro RESTORE_REGISTERS
-    add $8, %rsp
+    addq $8, %rsp
     popq %r8
     popq %r9
     popq %r10
@@ -73,7 +74,19 @@
 
     cli
     _swapgs
-    add $16, %rsp
+    addq $16, %rsp
+.endm
+
+.macro CALL_TRAP_HANDLER dest
+    cld
+    movq %rsp, %rcx
+    andq $-16, %rsp
+    subq $576, %rsp              // Shadow space, trap-frame pointer, and aligned FPU state.
+    movq %rcx, 32(%rsp)
+    fxsave64 48(%rsp)
+    call \dest
+    fxrstor64 48(%rsp)
+    movq 32(%rsp), %rsp
 .endm
 
 .macro TRAP_HANDLER_ERR name index dest
@@ -82,11 +95,7 @@
         // The CPU has already pushed the error code.
         pushq $\index
         PUSH_REGISTERS
-        cld 
-        movq %rsp, %rcx
-        subq $40, %rsp
-        call \dest
-        addq $40, %rsp
+        CALL_TRAP_HANDLER \dest
         RESTORE_REGISTERS
         iretq
 .endm
@@ -97,13 +106,17 @@
         pushq $0
         pushq $\index
         PUSH_REGISTERS
-        cld 
-        movq %rsp, %rcx
-        subq $40, %rsp
-        call \dest
-        addq $40, %rsp
+        CALL_TRAP_HANDLER \dest
         RESTORE_REGISTERS
         iretq
+.endm
+
+.macro TRAP_HANDLER index
+    TRAP_HANDLER_NOERR KiTrapHandler\index, \index + 32, KiCommonTrapDispatcher
+.endm
+
+.macro TRAP_TABLE_ENTRY index
+    .quad KiTrapHandler\index
 .endm
 
 /* Traps */
@@ -135,3 +148,20 @@ TRAP_HANDLER_ERR     KiVMMCommunicationException,       29, KiUnknownTrapHandler
 TRAP_HANDLER_ERR     KiSecurityException,               30, KiUnknownTrapHandler
 TRAP_HANDLER_NOERR   KiReserved2Exception,              31, KiUnknownTrapHandler
 
+.altmacro
+.set i, 0
+.rept 224 // 256 - 32
+    TRAP_HANDLER %i
+    .set i, i+1
+.endr
+
+.global KiTrapTableStart
+KiTrapTableStart:
+.set i, 0
+.rept 224
+    TRAP_TABLE_ENTRY %i
+    .set i, i+1
+.endr
+
+.global KiTrapTableEnd
+KiTrapTableEnd:

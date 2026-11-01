@@ -24,7 +24,9 @@ typedef struct _THREAD_CONTEXT {
     UINT64 Rsi;
     UINT64 Rbp;
     UINT64 Rbx;
-    UINT64 ReturnAddress;
+    UINT64 Rsp;
+    UINT64 Rip;
+    UINT8 FpuState[512 + 15];
 } THREAD_CONTEXT;
 
 #endif
