@@ -20,9 +20,10 @@
 VOID KeGetBacktrace(VOID *Frame, UINT_PTR Address) {
     UINT_PTR *Current = Frame;
     UINT_PTR Start = (UINT_PTR)Frame;
+    UINT_PTR Limit = Start + 0x10000;
     DbgPrintMsg("\nBacktrace:\n");
 
-    for (UINT32 i = 0; i < 32; i++) {
+    for (UINT32 i = 0; i < 64; i++) {
         const CHAR *DllName, *SymbolName;
         UINT_PTR Offset;
         if (LdrFindSymbolByAddress(Address, &DllName, &SymbolName, &Offset)) {
@@ -35,17 +36,33 @@ VOID KeGetBacktrace(VOID *Frame, UINT_PTR Address) {
             DbgPrintMsg("  %p\n", (VOID*)Address);
         }
 
-        if ((UINT_PTR)Current < Start || (UINT_PTR)Current - Start > 0x4000 || ((UINT_PTR)Current & (sizeof(UINT_PTR) - 1))) {
+        if ((UINT_PTR)Current < Start || (UINT_PTR)Current > Limit - 2 * sizeof(UINT_PTR) || ((UINT_PTR)Current & (sizeof(UINT_PTR) - 1))) {
             break;
         }
 
-        UINT_PTR Next = Current[0];
-        if (Next <= (UINT_PTR)Current || Next - Start > 0x4000 || Current[1] == 0) {
+        // RBP can point inside a frame too
+        BOOLEAN Found = FALSE;
+        for (SIZE_T Slot = 0; Slot < 5; Slot++) {
+            UINT_PTR *Saved = Current + Slot;
+            if ((UINT_PTR)Saved > Limit - 2 * sizeof(UINT_PTR)) break;
+
+            UINT_PTR Next = Saved[0];
+            UINT_PTR Return = Saved[1];
+            if (Next <= (UINT_PTR)Saved || Next > Limit || Return == 0) continue;
+
+            const CHAR *CallerDll;
+            const CHAR *CallerSymbol;
+            UINT_PTR CallerOffset;
+            if (!LdrFindSymbolByAddress(Return - 1, &CallerDll, &CallerSymbol, &CallerOffset)) {
+                continue;
+            }
+
+            Address = Return - 1;
+            Current = (UINT_PTR*)Next;
+            Found = TRUE;
             break;
         }
-
-        Address = Current[1] - 1;
-        Current = (UINT_PTR*)Next;
+        if (!Found) break;
     }
 }
 
