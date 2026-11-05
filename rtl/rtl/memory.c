@@ -28,32 +28,7 @@ VOID RtlCopyMemory(VOID* Destination, const VOID* Source, SIZE_T Size) {
     }
 }
 
-INT RtlCompareString(CHAR* String1, CHAR* String2, SIZE_T Size) {
-    while (Size && *String1 && (*String1 == *String2)) {
-        String1++;
-        String2++;
-        Size--;
-    }
-
-    if (Size == 0) {
-        return 0;
-    }
-
-    return *String1 - *String2;
-}
-
-BOOLEAN RtlStringEquals(CHAR* String1, CHAR* String2) {
-    while (*String1 && *String2 && *String1 == *String2) {
-        String1++;
-        String2++;
-    }
-
-    if (*String1 == *String2) {
-        return TRUE;
-    } else {
-        return FALSE;
-    }
-}
+/* uACPI needs these, GCC might also generate calls to them, its fine keeping them here */
 
 void *memset(void *s, int ch, size_t n) {
     unsigned char *p = (unsigned char*)s;

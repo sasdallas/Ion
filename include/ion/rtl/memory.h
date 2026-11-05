@@ -17,8 +17,6 @@
 
 VOID RtlFillMemory(VOID* Memory, UCHAR Value, SIZE_T Size);
 VOID RtlCopyMemory(VOID* Destination, const VOID* Source, SIZE_T Size);
-INT RtlCompareString(CHAR* String1, CHAR* String2, SIZE_T Size);
-BOOLEAN RtlStringEquals(CHAR* String1, CHAR* String2);
 
 FORCE_INLINE VOID RtlZeroMemory(VOID* Memory, SIZE_T Size) {
     return RtlFillMemory(Memory, 0, Size);

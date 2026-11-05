@@ -9,6 +9,7 @@ set(__RTL_SOURCES
     rtl/memory.c
     rtl/image.c
     rtl/status.c
+    rtl/string.c
 )
 
 add_library(rtl STATIC ${__RTL_SOURCES})

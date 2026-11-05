@@ -19,5 +19,6 @@
 #include <ion/rtl/memory.h>
 #include <ion/rtl/image.h>
 #include <ion/rtl/status.h>
+#include <ion/rtl/string.h>
 
 #endif
