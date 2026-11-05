@@ -38,7 +38,7 @@ static inline LONG64 InterlockedExchangeAdd64(volatile LONG64 *Addend, LONG64 Va
 }
 
 // returns previous value
-static inline LONG64 InterlockedComapreExchange64(volatile LONG64 *Destination, LONG64 Exchange, LONG64 Comparand) {
+static inline LONG64 InterlockedCompareExchange64(volatile LONG64 *Destination, LONG64 Exchange, LONG64 Comparand) {
     LONG64 Expected = Comparand;
     __atomic_compare_exchange_n(
         Destination,

@@ -39,7 +39,7 @@ static inline LONG InterlockedExchangeAdd(volatile LONG *Addend, LONG Value) {
 }
 
 // returns previous value
-static inline LONG InterlockedComapreExchange(volatile LONG *Destination, LONG Exchange, LONG Comparand) {
+static inline LONG InterlockedCompareExchange(volatile LONG *Destination, LONG Exchange, LONG Comparand) {
     LONG Expected = Comparand;
     __atomic_compare_exchange_n(
         Destination,
