@@ -17,12 +17,15 @@
 #include <ion/list.h>
 #include <ion/ke/mm/addrspace.h>
 
+#include <ion/ke/ke/priority.h>
+
 typedef ULONG PROCESS_ID;
 
 typedef struct _PROCESS {
     KSPIN_LOCK Spinlock;
     PROCESS_ID Pid;
     LIST_ENTRY ProcessListEntry;
+    KPRIORITY Priority;
 
     MM_ADDRESS_SPACE *AddressSpace;
 

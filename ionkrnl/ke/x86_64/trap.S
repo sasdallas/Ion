@@ -146,7 +146,7 @@ TRAP_HANDLER_ERR     KiControlProtectionException,      21, KiUnknownTrapHandler
 TRAP_HANDLER_NOERR   KiHypervisorInjectionException,    28, KiUnknownTrapHandler
 TRAP_HANDLER_ERR     KiVMMCommunicationException,       29, KiUnknownTrapHandler
 TRAP_HANDLER_ERR     KiSecurityException,               30, KiUnknownTrapHandler
-TRAP_HANDLER_NOERR   KiReserved2Exception,              31, KiUnknownTrapHandler
+TRAP_HANDLER_NOERR   KiApcSoftwareInterrupt,            31, KiCommonTrapDispatcher
 
 .altmacro
 .set i, 0

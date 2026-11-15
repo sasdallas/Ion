@@ -15,16 +15,17 @@
 
 #include <ion/base.h>
 
+#include <ion/ke/ps/process.h>
+#include <ion/ke/ps/thread.h>
+#include <ion/ke/ps/scheduler.h>
+#include <ion/ke/ps/dispatcher.h>
+#include <ion/ke/ob.h>
+
 #ifdef __x86_64__
 #include <ion/ke/x86_64/ps.h>
 #else
 #error impl architecture
 #endif
-
-#include <ion/ke/ps/process.h>
-#include <ion/ke/ps/thread.h>
-#include <ion/ke/ps/scheduler.h>
-#include <ion/ke/ob.h>
 
 extern PROCESS *PsSystemProcess;
 
@@ -38,8 +39,12 @@ IONAPI VOID PsReadyThread(THREAD *Thread);
 IONAPI VOID PsTickScheduler();
 IONAPI NO_RETURN VOID PsExitThread();
 
+VOID PsInitializeProcess(PROCESS *Process, CHAR *ImageName, KPRIORITY Priority);
+
 OS_STATUS PsInitialize();
+OS_STATUS PsInitializeProcessManager();
 OS_STATUS PsInitializeSystemProcess();
 OS_STATUS PsInitializeScheduler();
+OS_STATUS PsInitializeIdleProcess();
 
 #endif

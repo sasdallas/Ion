@@ -19,8 +19,15 @@
 /* Next thread ID */
 static THREAD_ID PspNextThreadId = 1;
 
-extern VOID PspSwitchContext(THREAD_CONTEXT *Old, THREAD_CONTEXT *New);
+extern THREAD *PspSwitchContext(THREAD_CONTEXT *Old, THREAD_CONTEXT *New, THREAD *Previous);
 extern VOID PspInitializeThreadSchedule(THREAD *Thread);
+extern VOID PspFinishThreadSwitch(THREAD *Previous);
+
+NO_RETURN VOID PsThreadStartup(THREAD *Previous, VOID (*StartRoutine)(VOID *), VOID *Context) {
+    PspFinishThreadSwitch(Previous);
+    StartRoutine(Context);
+    PsExitThread();
+}
 
 static VOID *PspAllocateKernelStack() {
     // TODO pull these from some other location
@@ -49,10 +56,14 @@ IONAPI OS_STATUS PsCreateThread(
     }
 
     KeInitializeSpinLock(&Thread->Spinlock);
+    Thread->Process = Process;
     Thread->ThreadId = (THREAD_ID)InterlockedExchangeAdd(&PspNextThreadId, 1);
     Thread->ThreadState = PsThreadInitialized;
     Thread->KernelStack = PspAllocateKernelStack();
     ASSERT(Thread->KernelStack != NULL);
+
+    // Prepare initial thread context
+    PspInitializeThreadContext(Thread, StartRoutine, Context);
 
     // Scheduler online
     PspInitializeThreadSchedule(Thread);
@@ -60,7 +71,6 @@ IONAPI OS_STATUS PsCreateThread(
     // Insert into process list
     KIRQL OldIrql;
     KeAcquireSpinLock(&Process->Spinlock, &OldIrql);
-    Thread->Process = Process;
     InsertTailList(&Process->ThreadList, &Thread->ProcEntry);
     ObReferenceObject(Thread);
     KeReleaseSpinLock(&Process->Spinlock, OldIrql);
@@ -76,4 +86,20 @@ IONAPI PROCESS *PsGetCurrentProcess() {
 
 IONAPI NO_RETURN VOID PsExitThread() {
     KeBugCheckWithMessage("PsExitThread NYI");
+}
+
+// Called with interrupts disabled
+VOID PspSwitchThread(THREAD *Next) {
+    KCPU *Cpu = KeGetCpu();
+    THREAD *Current = Cpu->CurrentThread;
+    
+    Next->ThreadState = PsThreadRunning;
+    Cpu->CurrentThread = Next;
+
+    if (Current != NULL && Current->Process->AddressSpace != Next->Process->AddressSpace) {
+        MmuSetAddressSpace(Next->Process->AddressSpace);
+    }
+
+    THREAD *Previous = PspSwitchContext(&Current->Context, &Next->Context, Current);
+    PspFinishThreadSwitch(Previous);
 }

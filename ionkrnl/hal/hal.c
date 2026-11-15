@@ -20,7 +20,7 @@
 static HAL_VTABLE *HalpVtable = NULL;
 
 IONAPI VOID HalTimerInterrupt() {
-    return;
+    PsTickScheduler();
 }
 
 IONAPI VOID HalSetVtable(HAL_VTABLE *Vtable) {
@@ -34,6 +34,10 @@ IONHALAPI VOID HalPrintString(const CHAR* String) {
 
 IONHALAPI OS_STATUS HalInitializeHardware() {
     return HalpVtable->InitializeHardware();
+}
+
+IONHALAPI UINT64 HalQueryMonotonicTime() {
+    return HalpVtable->QueryMonotonicTime();
 }
 
 IONHALAPI VOID HalConsolePrintf(const CHAR* Format, ...) {

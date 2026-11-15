@@ -23,6 +23,14 @@ LOADER_PARAMETER_BLOCK *KeLoaderParameterBlock = NULL;
 
 #define INIT_OR_BUGCHECK(fn) ({ OS_STATUS Status = fn(); if (!OS_SUCCESS(Status)) { KeBugCheckWithStatus(Status, #fn " failed to initialize"); }});
 
+VOID KeTestThread(VOID *Context) {
+    for (;;) {
+        char str[] = { KeGetCurrentThread()->ThreadId + 0x60 - 1, 0};
+        HalPrintString(str);
+        PsYieldThread();
+    }
+}
+
 OS_STATUS KiInitializeHal() {
     OS_STATUS Status = LdrInitializeHal();
     if (!OS_SUCCESS(Status)) return Status;
@@ -34,12 +42,17 @@ OS_STATUS KiInitializeHal() {
     Status = HalInitializeHardware();
     if (!OS_SUCCESS(Status)) return Status;
 
+    HalConsolePrintf("Monotonic time: %llu ns\n", HalQueryMonotonicTime());
+
     return STATUS_SUCCESS;
 }
 
 NO_RETURN VOID KeInitialize() {
     // Traps
     KeInitializeBsp();
+
+    // DPC
+    KiInitializeDpcQueue();
 
     // Mm init
     INIT_OR_BUGCHECK(MiInitializePfnDatabase);
@@ -55,18 +68,26 @@ NO_RETURN VOID KeInitialize() {
 
     // HAL
     INIT_OR_BUGCHECK(KiInitializeHal);
+
     // Ob
     INIT_OR_BUGCHECK(ObInitializeTypeManager);
 
     // Ps
     INIT_OR_BUGCHECK(PsInitialize);
     INIT_OR_BUGCHECK(PsInitializeSystemProcess);
+    INIT_OR_BUGCHECK(PsInitializeIdleProcess);
     INIT_OR_BUGCHECK(PsInitializeScheduler);
 
     // Ready
     ENABLE_INTERRUPTS();
 
-    PsYieldThread();
+    for (INT i = 0; i < 10; i++) {
+        THREAD *Thread;
+        PsCreateThread(PsSystemProcess, KeTestThread, NULL, &Thread);
+        PsReadyThread(Thread);
+    }
+
+    for (;;) PsYieldThread();
 
     DbgPrint("KeInitialize has finished, halting!\n");
     for (;;) {

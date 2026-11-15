@@ -56,7 +56,7 @@ extern VOID KiControlProtectionException(VOID);
 extern VOID KiHypervisorInjectionException(VOID);
 extern VOID KiVMMCommunicationException(VOID);
 extern VOID KiSecurityException(VOID);
-extern VOID KiReserved2Exception(VOID);
+extern VOID KiApcSoftwareInterrupt(VOID);
 
 extern UINT_PTR KiTrapTableStart;
 extern UINT_PTR KiTrapTableEnd;
@@ -166,7 +166,11 @@ VOID KeInitializeBsp() {
     KiSetInterruptVector(28, (UINT64)&KiHypervisorInjectionException);
     KiSetInterruptVector(29, (UINT64)&KiVMMCommunicationException);
     KiSetInterruptVector(30, (UINT64)&KiSecurityException);
-    KiSetInterruptVector(31, (UINT64)&KiReserved2Exception);
+
+    // APC interrupt is within exception bounds but its fine because Windows can do that,
+    // and it makes IRQL determination much easier (high nibble = target IRQL)
+    // (see Windows Internals if you want proof they do this shit)
+    KiSetInterruptVector(APC_VECTOR, (UINT64)&KiApcSoftwareInterrupt);
 
     // Install common trap tables
     SIZE_T Entries = ((UINT_PTR)&KiTrapTableEnd - (UINT_PTR)&KiTrapTableStart) / sizeof(UINT_PTR);
@@ -188,17 +192,40 @@ VOID KeInitializeBsp() {
 }
 
 VOID KiCommonTrapDispatcher(TRAP_FRAME *TrapFrame) {
+    KCPU *Cpu = KeGetCpu();
+
+    // The high nibble of the vector is the target IRQL
+    UINT Vector = (UINT)TrapFrame->IntNo;
+    KIRQL VectorIrql = Vector >> 4;
+    KIRQL OldIrql = Cpu->Irql;
+
+    // !!!: Hack for the spurious APIC vector
+    // Raise IRQL
+    if (Vector != APIC_SPURIOUS_VECTOR && VectorIrql > OldIrql) {
+        KeRaiseIrql(VectorIrql, &OldIrql);
+    }
+
+    // Lookup handler.
     VOID (*Handler)(TRAP_FRAME*) = (typeof(Handler))KiHandlerTable[TrapFrame->IntNo];
     if (Handler == NULL) {
         KeBugCheckTrapFrame(TrapFrame, "Unhandled interrupt %d", TrapFrame->IntNo);
     }
 
-    Handler(TrapFrame);    
+    Handler(TrapFrame);
+
+    // Finished execution, restore IRQL
+    if (Vector != APIC_SPURIOUS_VECTOR && VectorIrql > OldIrql) {
+        KeLowerIrql(OldIrql);
+    
+        // If interrupts were enabled on the trapping code,
+        // we can process software interrupts here.
+        if (TrapFrame->Rflags & (1 << 9)) {
+            KiDispatchPendingSoftwareInterrupt(OldIrql);
+        }
+    }
 }
 
 IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*)) {
-    ASSERT(Vector >= 31);
-
     if (KiHandlerTable[Vector] != NULL) {
         return STATUS_INVALID_PARAMETER;
     }

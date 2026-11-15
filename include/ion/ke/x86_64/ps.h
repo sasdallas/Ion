@@ -1,6 +1,6 @@
 /**
  * @file include/ion/ke/x86_64/ps.h
- * @brief Processor context
+ * @brief Process system
  * 
  * 
  * @copyright
@@ -15,18 +15,21 @@
 
 #include <ion/base.h>
 
-typedef struct _THREAD_CONTEXT {
-    UINT64 R15;
-    UINT64 R14;
-    UINT64 R13;
-    UINT64 R12;
-    UINT64 Rdi;
-    UINT64 Rsi;
-    UINT64 Rbp;
-    UINT64 Rbx;
-    UINT64 Rsp;
-    UINT64 Rip;
-    UINT8 FpuState[512 + 15];
-} THREAD_CONTEXT;
+#ifndef _ION_KE_PS_THREAD_H
+#error Include ion/ke/ps/thread.h first!
+#endif
+
+extern VOID PspThreadEntry();
+
+FORCE_INLINE VOID PspInitializeThreadContext(THREAD *Thread, VOID *StartRoutine, VOID *Context) {
+    RtlZeroMemory(&Thread->Context, sizeof(Thread->Context));
+    Thread->Context.R12 = (UINT64)StartRoutine;
+    Thread->Context.R13 = (UINT64)Context;
+    Thread->Context.Rsp = (((UINT64)Thread->KernelStack + 24576) & ~(UINT64)15) - 8;
+    Thread->Context.Rip = (UINT64)PspThreadEntry;
+
+    UINT_PTR Fpu = ((UINT_PTR)Thread->Context.FpuState + 15) & ~(UINT_PTR)15;
+    asm volatile ("fxsave64 (%0)" :: "r"(Fpu) : "memory");
+}
 
 #endif

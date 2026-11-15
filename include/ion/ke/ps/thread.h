@@ -16,11 +16,12 @@
 #include <ion/base.h>
 #include <ion/list.h>
 
+#include <ion/ke/ke/priority.h>
 #include <ion/ke/ps/scheduler.h>
 
 // TODO Fix these weird header dependencies
 #ifdef __x86_64__
-#include <ion/ke/x86_64/ps.h>
+#include <ion/ke/x86_64/ps_types.h>
 #else
 #error impl architecture
 #endif
@@ -47,6 +48,7 @@ typedef struct _THREAD {
     struct _PROCESS *Process;
     LIST_ENTRY ProcEntry;
 
+    KPRIORITY Priority;
     THREAD_SCHEDULE Schedule;
 
     struct _THREAD_CONTEXT Context;

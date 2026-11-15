@@ -76,22 +76,28 @@ function(create_iso)
 
     find_program(XORRISO xorriso REQUIRED)
 
-    add_custom_command(
-        OUTPUT "${ISO_OUTPUT}"
-        COMMAND "${XORRISO}" -as mkisofs
+    if (ARCH STREQUAL "x86_64")
+        set(XORRISO_ARGS
             -R -r -J
             -o "${ISO_OUTPUT}"
             "${ISO_ROOT}"
-            -b boot/limine-bios-cd.bin
+            -b boot/limine/limine-bios-cd.bin
             -no-emul-boot
             -boot-load-size 4
             -boot-info-table
             -hfsplus
             -apm-block-size 2048
-            --efi-boot boot/limine-uefi-cd.bin
+            --efi-boot boot/limine/limine-uefi-cd.bin
             -efi-boot-part
             --efi-boot-image
             --protective-msdos-label
+        )
+    endif()
+
+    add_custom_command(
+        OUTPUT "${ISO_OUTPUT}"
+        COMMAND "${XORRISO}" -as mkisofs
+            ${XORRISO_ARGS}
         DEPENDS ${STAGED_FILES} ${EXTRA_DEPS}
         COMMENT "Creating ISO"
         VERBATIM

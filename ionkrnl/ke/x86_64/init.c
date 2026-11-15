@@ -119,7 +119,7 @@ VOID KeInitLoaderParameterBlock() {
 
     ASSERT(KeLimineMemmapRequest.response != NULL);
     ASSERT(KeLimineModuleRequest.response != NULL);
-
+ 
     // Reserve the storage before LPB memory map creation
     struct limine_memmap_response *MemMap = KeLimineMemmapRequest.response;
     LOADER_MEMORY_REGION *Regions = TO_HHDM(KeAllocateFromMemmap(MemMap->entry_count * sizeof(LOADER_MEMORY_REGION)));

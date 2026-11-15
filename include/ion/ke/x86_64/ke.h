@@ -30,6 +30,17 @@ typedef struct _TRAP_FRAME {
 #define PASSIVE_LEVEL           0x00
 #define APC_LEVEL               0x01
 #define DISPATCH_LEVEL          0x02
+#define DEVICE_LEVEL            0x03
+#define CLOCK_LEVEL             0x04
+
+/**
+ * Each vector here has the high nibble of the byte reserved for the
+ * APIC priority class.
+ */
+#define DISPATCH_VECTOR         0x2F
+#define APC_VECTOR              0x1F
+#define CLOCK_VECTOR            0x40
+#define APIC_SPURIOUS_VECTOR    0xDF
 
 #define DISABLE_INTERRUPTS() asm volatile ("cli")
 #define ENABLE_INTERRUPTS() asm volatile ("sti")
@@ -72,20 +83,20 @@ FORCE_INLINE THREAD *KeGetCurrentThread() {
 FORCE_INLINE BOOLEAN KeSetInterruptState(BOOLEAN InterruptState) {
     UINT64 Rflags;
     asm volatile (  "pushf\n"
-                    "pop %0" : "=rm"(Rflags)
+                    "pop %0" : "=rm"(Rflags) :: "memory"
     );
 
     if (InterruptState) {
-        asm volatile ("sti");
+        asm volatile ("sti" ::: "memory");
     } else {
-        asm volatile ("cli");
+        asm volatile ("cli" ::: "memory");
     }
 
     return !!(Rflags & (1 << 9));
 }
 
 FORCE_INLINE VOID KeHardwareUpdateIrql(KIRQL NewIrql) {
-    asm volatile ("mov %0, %%cr8" :: "r"((UINT64)NewIrql));
+    asm volatile ("mov %0, %%cr8" :: "r"((UINT64)NewIrql) : "memory");
 }
 
 FORCE_INLINE unsigned long long __readmsr(const int Reg) {
@@ -95,3 +106,4 @@ FORCE_INLINE unsigned long long __readmsr(const int Reg) {
 }
 
 #endif
+

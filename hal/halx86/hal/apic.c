@@ -27,13 +27,11 @@ static struct acpi_madt *HalpAcpiMadt;
 static VOID *HalpLocalApicIo;
 
 #define APIC_EOI                0xB0
-#define APIC_SPURIOUS_VECTOR    0xF0
+#define APIC_SPURIOUS_REGISTER  0xF0
 #define APIC_LVT_TIMER          0x320
 #define APIC_TIMER_INITIAL      0x380
 #define APIC_TIMER_CURRENT      0x390
 #define APIC_TIMER_DIVIDE       0x3E0
-#define APIC_TIMER_VECTOR       0x40
-#define APIC_SPURIOUS_IRQ       0xFE
 
 FORCE_INLINE VOID HalpWriteLocalApic(UINT16 Register, UINT32 Value) {
     volatile UINT32* Pointer = (typeof(Pointer))((UINT_PTR)HalpLocalApicIo + Register);
@@ -74,14 +72,14 @@ static VOID HalpApicSpuriousInterrupt(TRAP_FRAME *TrapFrame) {
 }
 
 static OS_STATUS HalpInitializeApicTimer() {
-    OS_STATUS Status = KeSetInterruptHandler(APIC_TIMER_VECTOR, HalpApicTimerInterrupt);
+    OS_STATUS Status = KeSetInterruptHandler(CLOCK_VECTOR, HalpApicTimerInterrupt);
     if (!OS_SUCCESS(Status)) return Status;
 
-    Status = KeSetInterruptHandler(APIC_SPURIOUS_IRQ, HalpApicSpuriousInterrupt);
+    Status = KeSetInterruptHandler(APIC_SPURIOUS_VECTOR, HalpApicSpuriousInterrupt);
     if (!OS_SUCCESS(Status)) return Status;
 
-    HalpWriteLocalApic(APIC_SPURIOUS_VECTOR, 0x100 | APIC_SPURIOUS_IRQ);
-    HalpWriteLocalApic(APIC_LVT_TIMER, 0x10000 | APIC_TIMER_VECTOR);
+    HalpWriteLocalApic(APIC_SPURIOUS_REGISTER, 0x100 | APIC_SPURIOUS_VECTOR);
+    HalpWriteLocalApic(APIC_LVT_TIMER, 0x10000 | CLOCK_VECTOR);
     HalpWriteLocalApic(APIC_TIMER_DIVIDE, 0x3);
 
     // !!! Calibrate the APIC through the PIT
@@ -102,7 +100,7 @@ static OS_STATUS HalpInitializeApicTimer() {
     PortWrite8(0x61, Speaker);
     HalpWriteLocalApic(APIC_TIMER_INITIAL, 0);
 
-    HalpWriteLocalApic(APIC_LVT_TIMER, 0x20000 | APIC_TIMER_VECTOR);
+    HalpWriteLocalApic(APIC_LVT_TIMER, 0x20000 | CLOCK_VECTOR);
     HalpWriteLocalApic(APIC_TIMER_INITIAL, Ticks);
     return STATUS_SUCCESS;
 }
@@ -115,8 +113,8 @@ OS_STATUS HalApicInitialize() {
         return STATUS_NOT_FOUND;    
     }
 
+    // Process the MADT
     HalpAcpiMadt = (struct acpi_madt*)Table.ptr;
-
     struct acpi_entry_hdr *MadtListStart = (struct acpi_entry_hdr*)((UINT_PTR)HalpAcpiMadt + sizeof(struct acpi_madt));
     struct acpi_entry_hdr *MadtListEnd = (struct acpi_entry_hdr*)((UINT_PTR)HalpAcpiMadt + HalpAcpiMadt->hdr.length);
     while (MadtListStart < MadtListEnd) {

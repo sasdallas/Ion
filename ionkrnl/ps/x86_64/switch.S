@@ -11,7 +11,7 @@
 
 .code64
 
-// RCX = old context, RDX = new context
+// RCX = old context, RDX = new context, R8 = outgoing thread
 .global PspSwitchContext
 PspSwitchContext:
     movq %r15, 0(%rcx)
@@ -46,4 +46,16 @@ PspSwitchContext:
     movq 56(%rdx), %rbx
     movq 64(%rdx), %rsp
 
+    movq %r8, %rax
+
     jmp *72(%rdx)
+
+.global PspThreadEntry
+PspThreadEntry:
+    movq %rax, %rcx
+    movq %r12, %rdx
+    movq %r13, %r8
+    subq $40, %rsp
+    call PsThreadStartup
+    ud2
+

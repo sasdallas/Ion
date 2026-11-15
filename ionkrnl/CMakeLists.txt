@@ -15,15 +15,11 @@ endif()
 set_property(TARGET ionkrnl APPEND PROPERTY LINK_DEPENDS "${LINKER_SCRIPT}")
 target_link_options(ionkrnl PRIVATE "-Wl,-T,${LINKER_SCRIPT}")
 
-set_target_properties(
-    ionkrnl
-    PROPERTIES
-    ENABLE_EXPORTS TRUE
-    DEFINE_SYMBOL ""
-)
-
-target_link_options(ionkrnl
-    PRIVATE  -Wl,--export-all-symbols,--file-alignment=0x1000,-section-alignment=0x1000)
+if (ARCH STREQUAL "x86_64")
+    set_target_properties(ionkrnl PROPERTIES ENABLE_EXPORTS TRUE DEFINE_SYMBOL "")
+    target_link_options(ionkrnl PRIVATE
+        -Wl,--export-all-symbols,--file-alignment=0x1000,-section-alignment=0x1000)
+endif()
 
 target_link_options(ionkrnl PRIVATE "-Wl,--entry,KeSystemStartup")
 target_link_libraries(ionkrnl ke_rtl)

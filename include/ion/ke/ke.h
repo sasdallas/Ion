@@ -31,6 +31,8 @@ IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock();
 IONAPI VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock);
 IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql);
 IONAPI VOID KeReleaseSpinLock(KSPIN_LOCK *SpinLock, KIRQL NewIrql);
+IONAPI VOID KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
+IONAPI VOID KeReleaseSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
 
 /* Initialize */
 NO_RETURN VOID KeInitialize();
@@ -49,6 +51,17 @@ IONAPI BOOLEAN KeTryAcquireSemaphore(KSEMAPHORE *Semaphore);
 /* IRQL */
 IONAPI VOID KeRaiseIrql(KIRQL NewIrql, KIRQL *OldIrql);
 IONAPI VOID KeLowerIrql(KIRQL NewIrql);
+
+/* Software interrupt */
+IONAPI VOID KeRequestSoftwareInterrupt(KIRQL Irql);
+VOID KiAcknowledgeSoftwareInterrupt(KIRQL Irql);
+VOID KiDispatchPendingSoftwareInterrupt(KIRQL NewIrql);
+
+/* DPC */
+VOID KiInitializeDpcQueue();
+VOID KiDpcInterrupt();
+IONAPI VOID KeInitializeDpc(KDPC *Dpc, DEFERRED_FUNCTION Function);
+IONAPI VOID KeEnqueueDpc(KDPC *Dpc, VOID *Context);
 
 /* CPU */
 IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*));

@@ -17,12 +17,14 @@
 #include <uacpi/uacpi.h>
 
 VOID Halx86PrintString(const CHAR *String);
+UINT64 Halx86QueryMonotonicTime();
 OS_STATUS Halx86InitSystemConsole();
 OS_STATUS Halx86InitializeHardware();
 
 HAL_VTABLE Halx86Vtable = {
     .InitializeHardware = Halx86InitializeHardware,
-    .PrintString = Halx86PrintString
+    .PrintString = Halx86PrintString,
+    .QueryMonotonicTime = Halx86QueryMonotonicTime,
 };
 
 OS_STATUS Halx86InitializeHardware() {
@@ -32,6 +34,11 @@ OS_STATUS Halx86InitializeHardware() {
     };
 
     Status = HalApicInitialize();
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    Status = HalClockInitialize();
     if (!OS_SUCCESS(Status)) {
         return Status;
     }

@@ -22,6 +22,58 @@ OBJECT_TYPE *PsProcessObjectType = NULL;
 
 /* System process */
 PROCESS *PsSystemProcess = NULL;
+THREAD *PsInitializationThread = NULL;
+
+static VOID PspIdleLoop(VOID*) {
+    DbgPrint("PspIdleLoop: CPU %u is idling !\n", KeGetCpu()->LogicalId);
+
+    for (;;) {
+        KeHaltExecution();
+    }
+}
+
+OS_STATUS PsInitializeIdleProcess() {
+    OBJECT_ATTRIBUTES IdleAttributes;
+    ObInitializeObjectAttributes(
+        &IdleAttributes,
+        NULL,
+        OB_FLAG_KERNEL_OBJECT,
+        NULL
+    );
+
+    // Create the Idle process
+    PROCESS *IdleProcess;
+    OS_STATUS Status = ObCreateObject(
+        PsProcessObjectType,
+        &IdleAttributes,
+        sizeof(PROCESS),
+        (VOID**)&IdleProcess
+    );
+
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    PsInitializeProcess(IdleProcess, "Idle", PRIORITY_IDLE);
+    IdleProcess->AddressSpace = MmKernelAddressSpace;
+
+    // Create the Idle thread
+    THREAD *IdleThread;
+    Status = PsCreateThread(
+        IdleProcess,
+        PspIdleLoop,
+        NULL,
+        &IdleThread
+    );
+
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    KeGetCpu()->IdleProcess = IdleProcess;
+    KeGetCpu()->IdleThread = IdleThread;
+    return STATUS_SUCCESS;
+}
 
 OS_STATUS PsInitializeSystemProcess() {
     OBJECT_ATTRIBUTES SystemAttributes;
@@ -39,13 +91,14 @@ OS_STATUS PsInitializeSystemProcess() {
         return Status;
     }
 
-    KeInitializeSpinLock(&PsSystemProcess->Spinlock);
 
-    // The system process begins with a PID of 0
-    PsSystemProcess->Pid = 0;
+    PsInitializeProcess(PsSystemProcess, "System Process", PRIORITY_DEFAULT);
     PsSystemProcess->AddressSpace = MmKernelAddressSpace;
-    InitializeListHead(&PsSystemProcess->ThreadList);
-    RtlCopyMemory(PsSystemProcess->ImageName, "System Process", sizeof("System Process"));
+
+    // Create the initialization thread
+    PsCreateThread(PsSystemProcess, NULL, NULL, &PsInitializationThread);
+    KeGetCpu()->CurrentThread = PsInitializationThread;
+    PsInitializationThread->ThreadState = PsThreadRunning;
 
     return STATUS_SUCCESS;
 }
@@ -77,6 +130,12 @@ OS_STATUS PsInitialize() {
         &PsProcessObjectType
     );
 
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    // Initialize rest of Ps
+    Status = PsInitializeProcessManager();
     if (!OS_SUCCESS(Status)) {
         return Status;
     }

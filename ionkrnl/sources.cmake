@@ -5,6 +5,7 @@ list(APPEND __KE_SOURCE
                     ke/trap.c
                     ke/irql.c
                     ke/semaphore.c
+                    ke/dpc.c
 )
 
 if (ARCH STREQUAL "x86_64")
@@ -53,6 +54,7 @@ list(APPEND __PS_SOURCE
                     ps/init.c
                     ps/sched.c
                     ps/thread.c
+                    ps/process.c
 )
 
 if (ARCH STREQUAL "x86_64")
