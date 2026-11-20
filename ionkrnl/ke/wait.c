@@ -2,14 +2,14 @@
  * @file ionkrnl/ke/wait.c
  * @brief KeWaitForXxx manager
  * 
- * The design of this waiter is loosely modified from MINTIA2's design and Windows' flow.
+ * The design of this waiter is modified from MINTIA2's design and Windows' flow.
  * 
  * Effectively the core of it is that it supports fine-grained locking rather than a big lock
  * around the entire kernel dispatcher. It uses CAS to signal a wait completion on the thread too.
  * That's about it though, otherwise this is pretty bog standard.
  * 
  * @copyright
- * This design is copyright the MINTIA2 operating system.
+ * This design is inspired by the MINTIA2 operating system.
  * https://github.com/xrarch/mintia2/blob/main/OS/Executive/Ke/KeWait.jkl
  * 
  * This file is part of the Ion operating system.
