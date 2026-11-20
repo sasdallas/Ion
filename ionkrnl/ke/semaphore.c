@@ -2,8 +2,6 @@
  * @file ionkrnl/ke/semaphore.c
  * @brief Semaphore
  * 
- * @todo THIS IS A STUPID KSEMAPHORE IMPLEMENTATION. DOES NOT SUPPORT BLOCKING.
- * 
  * @copyright
  * This file is part of the Ion operating system.
  * Please see the LICENSE file in the main repository for more details.
@@ -15,29 +13,46 @@
 #include <ion/ion.h>
 
 IONAPI VOID KeInitializeSemaphore(KSEMAPHORE *Semaphore, LONG Count, LONG Limit) {
-    KeInitializeSpinLock(&Semaphore->Lock);
-    Semaphore->Count = Count;
+    PsInitializeDispatcher(&Semaphore->Header);
+    Semaphore->Header.SignalCount = (ULONG)Count;
     Semaphore->Limit = Limit;
 }
 
 IONAPI LONG KeReleaseSemaphore(KSEMAPHORE *Semaphore, KPRIORITY Boost, LONG Adjustment, BOOLEAN Wait) {
+    if (Wait) {
+        KeBugCheckWithMessage("KeReleaseSemaphore(): Wait is not supported");
+    }
+
+    DISPATCH_HEADER *Header = &Semaphore->Header;
     KIRQL Irql;
-    KeAcquireSpinLock(&Semaphore->Lock, &Irql);
-    LONG CountLast = InterlockedExchangeAdd(&Semaphore->Count, Adjustment);
-    KeReleaseSpinLock(&Semaphore->Lock, Irql);
-    return !!CountLast;
+    KeAcquireSpinLock(&Header->Spinlock, &Irql);
+
+    LONG PreviousCount = (LONG)Header->SignalCount;
+    if (Adjustment > Semaphore->Limit - PreviousCount) {
+        KeBugCheckWithMessage("KeReleaseSemaphore(): semaphore limit exceeded");
+    }
+
+    for (LONG i = 0; i < Adjustment; i++) {
+        if (KeProcessObjectWaiters(Semaphore, FALSE, STATUS_SUCCESS) == 0) {
+            Header->SignalCount += 1;
+        }
+    }
+
+    KeReleaseSpinLock(&Header->Spinlock, Irql);
+    return PreviousCount;
 }
 
 IONAPI BOOLEAN KeTryAcquireSemaphore(KSEMAPHORE *Semaphore) {
+    DISPATCH_HEADER *Header = &Semaphore->Header;
     KIRQL Irql;
-    KeAcquireSpinLock(&Semaphore->Lock, &Irql);
+    KeAcquireSpinLock(&Header->Spinlock, &Irql);
 
-    if (Semaphore->Count == 0) {
-        KeReleaseSpinLock(&Semaphore->Lock, Irql);
+    if (Header->SignalCount == 0) {
+        KeReleaseSpinLock(&Header->Spinlock, Irql);
         return FALSE;
     }
 
-    Semaphore->Count -= 1;
-    KeReleaseSpinLock(&Semaphore->Lock, Irql);
+    Header->SignalCount -= 1;
+    KeReleaseSpinLock(&Header->Spinlock, Irql);
     return TRUE;
 }

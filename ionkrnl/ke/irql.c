@@ -41,6 +41,7 @@ VOID KiDispatchPendingSoftwareInterrupt(KIRQL NewIrql) {
 
     // Restore IRQL, some of the software interrupt functions may have set it to something else entirely.
     Cpu->Irql = NewIrql;
+    KeHardwareUpdateIrql(NewIrql);
 
     KeSetInterruptState(Restore);
 }

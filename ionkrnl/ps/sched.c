@@ -23,8 +23,6 @@ extern VOID PspSwitchThread(THREAD *Next);
 #define PspUnlockScheduler(Scheduler, Irql) ({ KeReleaseSpinLock(&(Scheduler)->Lock, (Irql)); })
 #define PspLockSchedulerElevated(Scheduler) ({ KeAcquireSpinLockAtDpcLevel(&(Scheduler)->Lock); })
 #define PspUnlockSchedulerElevated(Scheduler) ({ KeReleaseSpinLockAtDpcLevel(&(Scheduler)->Lock); })
-#define PspLockThread(Thread) ({ KIRQL Irql; KeAcquireSpinLock(&(Thread)->Spinlock, &Irql); Irql; })
-#define PspUnlockThread(Thread, Irql) ({ KeReleaseSpinLock(&(Thread)->Spinlock, (Irql)); })
 
 VOID PspFinishThreadSwitch(THREAD *Previous);
 
@@ -74,15 +72,24 @@ FORCE_INLINE VOID PspInsertThread(SCHEDULER *Scheduler, THREAD *Thread, BOOLEAN 
  */
 VOID PspFinishThreadSwitch(THREAD *Previous) {
     KCPU *Cpu = KeGetCpu();
+    ASSERT(Cpu->Irql == DISPATCH_LEVEL);
 
-    KIRQL Irql = PspLockScheduler(&Cpu->Scheduler);
-
+    // Reinsert the thread if needed
+    PspLockSchedulerElevated(&Cpu->Scheduler);
     if (Previous != NULL && Previous != Cpu->IdleThread && Previous->ThreadState == PsThreadRunning) {
         PspInsertThread(&Cpu->Scheduler, Previous, TRUE);
     }
+    PspUnlockSchedulerElevated(&Cpu->Scheduler);
 
-    PspUnlockScheduler(&Cpu->Scheduler, Irql);
+    // Unlock the thread if its needed
+    if (Previous != NULL && Previous->UnlockAfterSwitch) {
+        Previous->UnlockAfterSwitch = FALSE;
+        KeReleaseSpinLockAtDpcLevel(&Previous->Spinlock);
+    }
+
+    // Enable interrupts first so KeLowerIrql can dispatch pending DPCs
     KeSetInterruptState(TRUE);
+    KeLowerIrql(Cpu->CurrentThread->ResumeIrql);
 }
 
 /* Scheduler is expected to be locked */
@@ -135,6 +142,8 @@ static VOID PspInitializeTimesharedQueue(SCHEDULER *Scheduler) {
 
 VOID PspInitializeThreadSchedule(THREAD *Thread) {
     Thread->Priority = Thread->Process->Priority;
+    Thread->ResumeIrql = PASSIVE_LEVEL;
+    Thread->UnlockAfterSwitch = FALSE;
     Thread->Schedule.CurrentQueue = SCHED_QUEUE_TIMESHARED;
     Thread->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
     Thread->Schedule.RunTime = 0;
@@ -173,7 +182,7 @@ IONAPI VOID PsTickScheduler() {
 }
 
 IONAPI VOID PsReadyThread(THREAD *Thread) {
-    KIRQL Irql = PspLockThread(Thread);
+    KIRQL Irql = PsLockThread(Thread);
     SCHEDULER *Scheduler = KeGetScheduler();
 
     // Insert the thread's schedule
@@ -181,7 +190,33 @@ IONAPI VOID PsReadyThread(THREAD *Thread) {
     PspInsertThread(Scheduler, Thread, FALSE); // Updates ThreadState to PsThreadReady
     PspUnlockScheduler(Scheduler, SchedIrql);
 
-    PspUnlockThread(Thread, Irql);
+    PsUnlockThread(Thread, Irql);
+}
+
+IONAPI VOID PsYieldThreadLocked() {
+    KCPU *Cpu = KeGetCpu();
+    SCHEDULER *Scheduler = &Cpu->Scheduler;
+    THREAD *Current = Cpu->CurrentThread;
+    ASSERT(KeSetInterruptState(FALSE) == TRUE);
+
+    // Must re-enter at DISPATCH_LEVEL
+    ASSERT(Cpu->Irql == DISPATCH_LEVEL);
+
+    // Select a new thread from the scheduler
+    PspLockSchedulerElevated(Scheduler);
+
+    THREAD *Next = Cpu->NextThread;
+    if (Next) {
+        Cpu->NextThread = NULL;
+    } else {
+        Next = PspSelectThread(Scheduler);
+    }
+
+    PspUnlockSchedulerElevated(Scheduler);
+
+    Current->ResumeIrql = Cpu->Irql;
+    Current->UnlockAfterSwitch = TRUE;
+    PspSwitchThread(Next);
 }
 
 IONAPI VOID PsYieldThread() {
@@ -190,7 +225,12 @@ IONAPI VOID PsYieldThread() {
 
     ASSERT(KeSetInterruptState(FALSE) == TRUE);
 
-    KIRQL Irql = PspLockScheduler(Scheduler);
+    // Go to DISPATCH_LEVEL right now
+    KIRQL OldIrql;
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+
+    // Find another thread
+    PspLockSchedulerElevated(Scheduler);
 
     THREAD *Current = Cpu->CurrentThread;
     THREAD *Next = Cpu->NextThread;
@@ -200,14 +240,8 @@ IONAPI VOID PsYieldThread() {
         Next = PspSelectThread(Scheduler);
     }
 
-    // If there's no other thread to switch to, might as well yield back.
-    if (Next == NULL || Next == Current) {
-        PspUnlockScheduler(Scheduler, Irql);
-        KeSetInterruptState(TRUE);
-        return;
-    }
-
     // Scheduler can be unlocked here since Current is floating right now
-    PspUnlockScheduler(Scheduler, Irql);
+    PspUnlockSchedulerElevated(Scheduler);
+    Current->ResumeIrql = OldIrql;
     PspSwitchThread(Next);
 }

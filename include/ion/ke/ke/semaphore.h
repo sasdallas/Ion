@@ -14,10 +14,10 @@
 #define _ION_KE_KE_SEMAPHORE_H 1
 
 #include <ion/base.h>
+#include <ion/ke/ps/dispatcher.h>
 
 typedef struct _KSEMAPHORE {
-    KSPIN_LOCK Lock;
-    LONG Count;
+    DISPATCH_HEADER Header;
     LONG Limit;
 } KSEMAPHORE;
 

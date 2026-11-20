@@ -59,7 +59,13 @@ VOID KiDpcInterrupt() {
     KCPU *Cpu = KeGetCpu();
 
     KiAcknowledgeSoftwareInterrupt(DISPATCH_LEVEL);
+
     Cpu->Irql = DISPATCH_LEVEL;
+    KeHardwareUpdateIrql(DISPATCH_LEVEL);
+
+    // Do some other stuff beforehand
+extern VOID KiCleanupPendingWaiters();
+    KiCleanupPendingWaiters();
 
     // Processing loop for DPCs
     LIST_ENTRY *DpcList = &Cpu->DpcListHead;

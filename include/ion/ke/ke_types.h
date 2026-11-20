@@ -21,6 +21,7 @@
 #include <ion/ke/ke/semaphore.h>
 #include <ion/ke/ke/priority.h>
 #include <ion/ke/ke/dpc.h>
+#include <ion/ke/ke/wait.h>
 
 #include <ion/ke/ps/scheduler.h>
 #include <ion/ke/ps/thread.h>
@@ -50,6 +51,9 @@ typedef struct _KCPU {
     // Idle processor + thread
     THREAD *IdleThread;
     PROCESS *IdleProcess;
+
+    // Wait clean list
+    THREAD *PendingUnwaitCleanupList;
 
     // CPU scheduling information
     SCHEDULER Scheduler;

@@ -37,3 +37,7 @@ IONAPI VOID KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock) {
 IONAPI VOID KeReleaseSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock) {
     __atomic_clear(SpinLock, __ATOMIC_RELEASE);
 }
+
+IONAPI BOOLEAN KeTryAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock) {
+    return __atomic_test_and_set(SpinLock, __ATOMIC_ACQUIRE) == 0;
+}

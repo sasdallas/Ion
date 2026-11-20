@@ -24,7 +24,8 @@ static const CHAR* RtlStatusStringsError[] = {
     "The executable image is invalid.",
     "A DLL or executable image was not found.",
     "An entrypoint within a DLL/application was not found.",
-    "An entry or object was not able to be located."
+    "An entry or object was not able to be located.",
+    "A wait for an object timed out."
 };
 
 

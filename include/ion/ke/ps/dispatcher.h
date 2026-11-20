@@ -26,6 +26,10 @@ typedef struct _DISPATCH_HEADER {
 
 #define PsLockDispatcher(Dispatcher) KeAcquireSpinLock(&(Dispatcher)->Spinlock)
 #define PsUnlockDispatcher(Dispatcher, Irql) KeReleaseSpinLock(&(Dispatcher)->Spinlock, (Irql))
+#define PsLockDispatcherElevated(Dispatcher) KeAcquireSpinLockAtDpcLevel(&(Dispatcher)->Spinlock)
+#define PsUnlockDispatcherElevated(Dispatcher) KeReleaseSpinLockAtDpcLevel(&(Dispatcher)->Spinlock)
+
+extern VOID KeInitializeSpinLock(KSPIN_LOCK *SpinLock);
 
 static inline VOID PsInitializeDispatcher(DISPATCH_HEADER *Header) {
     KeInitializeSpinLock(&Header->Spinlock);

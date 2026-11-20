@@ -16,7 +16,9 @@
 #include <ion/base.h>
 #include <ion/list.h>
 
+#include <ion/ke/ke/irql.h>
 #include <ion/ke/ke/priority.h>
+#include <ion/ke/ke/wait.h>
 #include <ion/ke/ps/scheduler.h>
 
 // TODO Fix these weird header dependencies
@@ -50,6 +52,21 @@ typedef struct _THREAD {
 
     KPRIORITY Priority;
     THREAD_SCHEDULE Schedule;
+
+    // Wait information
+    INT WaitCount;
+    OS_STATUS WaitStatus;
+    KWAIT_TYPE WaitType;
+    KWAIT_BLOCK WaitBlocks[THREAD_WAIT_BLOCKS];
+    KWAIT_BLOCK *WaitBlockArray;
+    struct _THREAD *PendingUnwaitNext;
+
+    // Resume IRQL, so that if you enter PsYieldThread(Locked) you are able
+    // to exit it with the same IRQL
+    KIRQL ResumeIrql;
+
+    // Release this thread's lock after it has switched out
+    BOOLEAN UnlockAfterSwitch;
 
     struct _THREAD_CONTEXT Context;
     VOID *KernelStack;

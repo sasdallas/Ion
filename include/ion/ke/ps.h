@@ -32,9 +32,16 @@ extern PROCESS *PsSystemProcess;
 extern OBJECT_TYPE *PsProcessObjectType;
 extern OBJECT_TYPE *PsThreadObjectType;
 
+#define PsLockThread(Thread) ({ KIRQL Irql; KeAcquireSpinLock(&(Thread)->Spinlock, &Irql); Irql; })
+#define PsUnlockThread(Thread, Irql) ({ KeReleaseSpinLock(&(Thread)->Spinlock, (Irql)); })
+#define PsLockThreadElevated(Thread) KeAcquireSpinLockAtDpcLevel(&(Thread)->Spinlock)
+#define PsUnlockThreadElevated(Thread) KeReleaseSpinLockAtDpcLevel(&(Thread)->Spinlock)
+#define PsTryLockThreadElevated(Thread) KeTryAcquireSpinLockAtDpcLevel(&(Thread)->Spinlock)
+
 IONAPI PROCESS *PsGetCurrentProcess();
 IONAPI OS_STATUS PsCreateThread(PROCESS *Process, VOID (*StartRoutine)(VOID *Context), VOID *Context, THREAD **ThreadOutput);
 IONAPI VOID PsYieldThread();
+IONAPI VOID PsYieldThreadLocked(); // enter with thread lock held, exits with thread lock released (IRQL is unchanged!)
 IONAPI VOID PsReadyThread(THREAD *Thread);
 IONAPI VOID PsTickScheduler();
 IONAPI NO_RETURN VOID PsExitThread();

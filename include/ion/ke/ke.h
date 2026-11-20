@@ -33,6 +33,7 @@ IONAPI VOID KeAcquireSpinLock(KSPIN_LOCK *SpinLock, KIRQL *OldIrql);
 IONAPI VOID KeReleaseSpinLock(KSPIN_LOCK *SpinLock, KIRQL NewIrql);
 IONAPI VOID KeAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
 IONAPI VOID KeReleaseSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
+IONAPI BOOLEAN KeTryAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
 
 /* Initialize */
 NO_RETURN VOID KeInitialize();
@@ -65,6 +66,28 @@ IONAPI VOID KeEnqueueDpc(KDPC *Dpc, VOID *Context);
 
 /* CPU */
 IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*));
+
+/* Wait */
+INT KeProcessObjectWaiters(VOID *Object, BOOLEAN WakeAll, OS_STATUS Status);
+OS_STATUS KeWaitForMultipleObjects(
+    ULONG Count,
+    VOID **Objects,
+    KWAIT_TYPE WaitType,
+    KWAIT_REASON WaitReason,
+    KPROCESSOR_MODE WaitMode,
+    BOOLEAN Alertable,
+    INT Timeout,
+    KWAIT_BLOCK *WaitBlockArray
+);
+
+OS_STATUS KeWaitForSingleObject(
+    VOID *Object,
+    KWAIT_REASON WaitReason,
+    KPROCESSOR_MODE WaitMode,
+    BOOLEAN Alertable,
+    INT Timeout
+);
+
 
 // KeOnBsp only safe if scheduling is disabled!!!
 // otherwise you will get switched off. does unsafe KeGetCpu()->LogicalId read
