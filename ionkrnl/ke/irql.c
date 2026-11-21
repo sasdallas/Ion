@@ -15,7 +15,7 @@
 
 /*
  * Expected to be called whenever IRQL drops below a certain level.
- * Only IRQLs pending below NewIrql can be executed
+ * Only IRQLs pending above NewIrql can be executed
  * Should be called with interrupts enabled.
  * 
  * KiDispatchPendingSoftwareInterrupt's architecture is inspired by Boron + MINTIA2
