@@ -14,6 +14,7 @@
 #define _ION_KE_PS_SCHEDULER_H 1
 
 #include <ion/base.h>
+#include <ion/ke/ke/dpc.h>
 #include <ion/ke/ke/lock.h>
 #include <ion/ion.h>
 
@@ -64,6 +65,7 @@ typedef struct _SCHEDULER {
     SCHED_RUNTIME_QUEUE Realtime;
     SCHED_CALENDAR_QUEUE Timeshared;
     SCHED_RUNTIME_QUEUE Idle;
+    KDPC Dpc;
 } SCHEDULER;
 
 #endif

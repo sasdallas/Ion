@@ -140,6 +140,21 @@ static VOID PspInitializeTimesharedQueue(SCHEDULER *Scheduler) {
     }
 }
 
+static VOID PspTickSchedulerDpc(KDPC *Dpc, VOID *Context) {
+    SCHEDULER *Scheduler = KeGetScheduler();
+    PspLockSchedulerElevated(Scheduler);
+
+    SCHED_CALENDAR_QUEUE *Queue = &Scheduler->Timeshared;
+    if (Queue->InsertionIndex == Queue->RemovalIndex) {
+        Queue->InsertionIndex = (Queue->InsertionIndex + 1) % SCHED_NUM_QUEUES;
+        if ((Queue->Bitmap & (1UL << Queue->RemovalIndex)) == 0) {
+            Queue->RemovalIndex = Queue->InsertionIndex;
+        }
+    }
+
+    PspUnlockSchedulerElevated(Scheduler);
+}
+
 VOID PspInitializeThreadSchedule(THREAD *Thread) {
     Thread->Priority = Thread->Process->Priority;
     Thread->ResumeIrql = PASSIVE_LEVEL;
@@ -158,6 +173,7 @@ OS_STATUS PsInitializeScheduler() {
 
     SCHEDULER *Scheduler = KeGetScheduler();
     KeInitializeSpinLock(&Scheduler->Lock);
+    KeInitializeDpc(&Scheduler->Dpc, PspTickSchedulerDpc);
     RtlZeroMemory(&Scheduler->Realtime, sizeof(SCHED_RUNTIME_QUEUE));
     RtlZeroMemory(&Scheduler->Idle, sizeof(SCHED_RUNTIME_QUEUE));
 
@@ -168,17 +184,7 @@ OS_STATUS PsInitializeScheduler() {
 
 IONAPI VOID PsTickScheduler() {
     SCHEDULER *Scheduler = KeGetScheduler();
-    PspLockSchedulerElevated(Scheduler);
-
-    SCHED_CALENDAR_QUEUE *Queue = &Scheduler->Timeshared;
-    if (Queue->InsertionIndex == Queue->RemovalIndex) {
-        Queue->InsertionIndex = (Queue->InsertionIndex + 1) % SCHED_NUM_QUEUES;
-        if ((Queue->Bitmap & (1UL << Queue->RemovalIndex)) == 0) {
-            Queue->RemovalIndex = Queue->InsertionIndex;
-        }
-    }
-
-    PspUnlockSchedulerElevated(Scheduler);
+    KeEnqueueDpc(&Scheduler->Dpc, NULL);
 }
 
 IONAPI VOID PsReadyThread(THREAD *Thread) {
