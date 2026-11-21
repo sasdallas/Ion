@@ -148,7 +148,6 @@ INT KeProcessObjectWaiters(VOID *Object, BOOLEAN WakeAll, OS_STATUS Status) {
 OS_STATUS KeWaitForMultipleObjects(
     ULONG Count,
     VOID **Objects,
-    KWAIT_TYPE WaitType,
     KWAIT_REASON WaitReason,
     KPROCESSOR_MODE WaitMode,
     BOOLEAN Alertable,
@@ -156,7 +155,6 @@ OS_STATUS KeWaitForMultipleObjects(
     KWAIT_BLOCK *WaitBlockArray
 )
 {
-    ASSERT(WaitType == WaitAny && "WaitAll isn't supported at the moment :-)");
     ASSERT(Timeout == -1 && "Timeout != -1 isn't supported at the moment :-)");
     ASSERT(Count < MAX_WAIT_BLOCKS); 
 
@@ -183,7 +181,6 @@ OS_STATUS KeWaitForMultipleObjects(
     // WAIT_PLACEHOLDER is an idea "borrowed" from MINTIA's wait design
     Thread->WaitStatus = STATUS_WAIT_PLACEHOLDER;
     Thread->WaitCount = Count;
-    Thread->WaitType = WaitType;
     Thread->WaitBlockArray = WaitBlocks;
 
     // Iterate through each dispatch header
@@ -252,7 +249,6 @@ OS_STATUS KeWaitForSingleObject(
     return KeWaitForMultipleObjects(
         1,
         Objects,
-        WaitAny,
         WaitReason,
         WaitMode,
         Alertable,

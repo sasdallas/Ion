@@ -56,7 +56,6 @@ typedef struct _THREAD {
     // Wait information
     INT WaitCount;
     OS_STATUS WaitStatus;
-    KWAIT_TYPE WaitType;
     KWAIT_BLOCK WaitBlocks[THREAD_WAIT_BLOCKS];
     KWAIT_BLOCK *WaitBlockArray;
     struct _THREAD *PendingUnwaitNext;

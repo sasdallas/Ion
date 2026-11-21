@@ -21,11 +21,6 @@
 #define THREAD_WAIT_BLOCKS      8
 #define MAX_WAIT_BLOCKS         32
 
-typedef enum _KWAIT_TYPE {
-    WaitAll,
-    WaitAny,
-} KWAIT_TYPE;
-
 typedef enum _KWAIT_REASON {
     Executive,
     UserRequest

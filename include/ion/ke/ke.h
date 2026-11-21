@@ -72,7 +72,6 @@ INT KeProcessObjectWaiters(VOID *Object, BOOLEAN WakeAll, OS_STATUS Status);
 OS_STATUS KeWaitForMultipleObjects(
     ULONG Count,
     VOID **Objects,
-    KWAIT_TYPE WaitType,
     KWAIT_REASON WaitReason,
     KPROCESSOR_MODE WaitMode,
     BOOLEAN Alertable,
