@@ -33,7 +33,7 @@ FORCE_INLINE UINT64 __rdtsc() {
 }
 
 UINT64 Halx86QueryMonotonicTime() {
-    return (UINT64)((__uint128_t)(__rdtsc() - HalpBaseTsc) * HalpTscMultiplier) >> 32; 
+    return (UINT64)(((__uint128_t)(__rdtsc() - HalpBaseTsc) * HalpTscMultiplier) >> 32);
 }
 
 OS_STATUS HalClockInitialize() {
