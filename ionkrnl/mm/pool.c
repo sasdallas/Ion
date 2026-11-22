@@ -61,7 +61,7 @@ static VOID MmInitializePool(MM_POOL *Pool, const CHAR* Name, MM_POOL_TYPE Type,
     Pool->SlabSize = PAGE_SIZE;
     Pool->ObjectsPerSlab = (Pool->SlabSize - Pool->ObjectOffset) / Pool->ObjectRealSize;
 
-    // TODO?
+    // TODO this is needed
     if (Pool->ObjectOffset >= Pool->SlabSize) {
         KeBugCheckWithMessage("MmCreatePool cannot use an object of size %lu as it would be bigger than a page", ObjectSize);
     }
@@ -114,6 +114,7 @@ OS_STATUS MmAllocatePool2(MM_POOL *Pool, UINT AllocFlags, VOID **Output) {
         Slab = CONTAINING_RECORD(RemoveHeadList(&Pool->Free), MM_POOL_SLAB, Entry);
         Pool->FreeSlabCount -= 1;
     } else {
+        // TODO abbix: check if new slabs were added in the meantimem and pick from those
         // A slab must be allocated and we can't hold the lock during it
         KeReleaseSpinLock(&Pool->Lock, Irql);
 
@@ -173,7 +174,7 @@ OS_STATUS MmFreePool(MM_POOL *Pool, VOID *Allocation) {
         }
 
         Pool->FreeSlabCount += 1;
-        InsertHeadList(&Pool->Free, &Slab->Entry);
+        InsertTailList(&Pool->Free, &Slab->Entry);
     } else if (Slab->FreeCount == 1) {
         // We got removed from the full list and moved to the partial list
         RemoveEntryList(&Slab->Entry);
