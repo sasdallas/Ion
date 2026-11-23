@@ -23,7 +23,7 @@
 #if PUSH_LOCK_DEBUG
 #define PUSH_LOCK_ASSERT(x) ASSERT(x)
 #else
-#define PUSH_LOCK_ASSERT(x)
+#define PUSH_LOCK_ASSERT(x) (void)(x)
 #endif
 
 /* Helpers */
@@ -97,12 +97,8 @@ static VOID KiWakePushLock(KPUSH_LOCK *PushLock, KPUSH_LOCK Value) {
             NewLast->Last = NewLast;
             Head->Last = NewLast->Last;
 
-            KPUSH_LOCK NewValue = Value & ~(PUSH_LOCK_WAKING);
-            NewValue = InterlockedCompareExchangePointer(PushLock, NewValue, Value);
-            if (NewValue != Value) {
-                Value = NewValue;
-                continue;;
-            }
+            KPUSH_LOCK Previous = InterlockedAndPointer(PushLock, ~PUSH_LOCK_WAKING);
+            PUSH_LOCK_ASSERT((Previous & PUSH_LOCK_WAKING) && (Previous & PUSH_LOCK_LOCKED));
 
             KiWakePushLockWaiter(Last);
         } else {

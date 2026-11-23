@@ -82,6 +82,12 @@ static inline LONG InterlockedOr(volatile LONG *Target, LONG Value) {
 }
 
 #ifdef _ION64
+#define InterlockedAndPointer(Target, Value) InterlockedAnd64((LONG64*)(Target), (LONG64)Value)
+#else
+#define InterlockedAndPointer(Target, Value) InterlockedAnd((LONG64*)(Target), (LONG64)Value)
+#endif
+
+#ifdef _ION64
 #define InterlockedOrPointer(Target, Value) InterlockedOr64((LONG64*)(Target), (LONG64)Value)
 #else
 #define InterlockedOrPointer(Target, Value) InterlockedOr(Target, Value)
