@@ -10,14 +10,16 @@ if (NOT CMAKE_CROSSCOMPILING)
     message(FATAL_ERROR "Missing toolchain file, it is in cmake/toolchain/x86_64.cmake")
 endif()
 
-set(ARCH "x86_64" CACHE STRING "Architecture target")
+option(ENABLE_SMP "Enable SMP support" ON)
 
-if (NOT ARCH STREQUAL "x86_64")
-    message(FATAL_ERROR "death")
-endif()
+set(ARCH "x86_64" CACHE STRING "Architecture target")
 
 if (ARCH STREQUAL "x86_64")
     add_definitions(-D_ION64)
+endif()
+
+if (ENABLE_SMP)
+    add_definitions(-D_SMP=1)
 endif()
 
 # Helpers
