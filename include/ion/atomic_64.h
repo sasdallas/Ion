@@ -38,18 +38,22 @@ static inline LONG64 InterlockedExchangeAdd64(volatile LONG64 *Addend, LONG64 Va
 }
 
 // returns previous value
-static inline LONG64 InterlockedCompareExchange64(volatile LONG64 *Destination, LONG64 Exchange, LONG64 Comparand) {
+static inline LONG64 __InterlockedCompareExchange64(volatile LONG64 *Destination, LONG64 Exchange, LONG64 Comparand, INT Order, INT FailureOrder) {
     LONG64 Expected = Comparand;
     __atomic_compare_exchange_n(
         Destination,
         &Expected,
         Exchange,
         0,
-        __ATOMIC_SEQ_CST,
-        __ATOMIC_SEQ_CST
+        Order,
+        FailureOrder
     );
-
     return Expected;
+}
+
+// returns previous value
+static inline LONG64 InterlockedCompareExchange64(volatile LONG64 *Destination, LONG64 Exchange, LONG64 Comparand) {
+    return __InterlockedCompareExchange64(Destination, Exchange, Comparand, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
 // returns value before operation
