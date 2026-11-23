@@ -2,6 +2,7 @@
  * @file ionkrnl/ps/sched.c
  * @brief Thread scheduler
  * 
+ * This is a ULE based algorithm from FreeBSD
  * 
  * @copyright
  * This file is part of the Ion operating system.
@@ -26,6 +27,40 @@ extern VOID PspSwitchThread(THREAD *Next);
 
 VOID PspFinishThreadSwitch(THREAD *Previous);
 
+/* Scheduler is expected to be locked. */
+static VOID PspInsertRealtimeQueue(SCHEDULER *Scheduler, THREAD *Thread, BOOLEAN AtHead) {
+    SCHED_RUNTIME_QUEUE *Queue = &Scheduler->Realtime;
+    KPRIORITY Priority = Thread->Priority;
+    ASSERT(Priority >= PRIORITY_LOW_REALTIME && Priority < PRIORITY_MAX);
+
+    LIST_ENTRY *List = &Queue->Queues[Priority];
+    if (AtHead) {
+        InsertHeadList(List, &Thread->Schedule.Entry);
+    } else {
+        InsertTailList(List, &Thread->Schedule.Entry);
+    }
+
+    Queue->Bitmap |= 1U << Priority;
+    Thread->Schedule.CurrentQueue = SCHED_QUEUE_REALTIME;
+}
+
+/* Scheduler is expected to be locked. */
+static THREAD *PspRemoveRealtimeQueue(SCHEDULER *Scheduler) {
+    SCHED_RUNTIME_QUEUE *Queue = &Scheduler->Realtime;
+    if (Queue->Bitmap == 0) return NULL;
+
+    INT Priority = 31 - __builtin_clz(Queue->Bitmap);
+    LIST_ENTRY *List = &Queue->Queues[Priority];
+    LIST_ENTRY *Entry = RemoveHeadList(List);
+    if (IsListEmpty(List)) {
+        Queue->Bitmap &= ~(1U << Priority);
+    }
+
+    THREAD *Thread = CONTAINING_RECORD(Entry, THREAD, Schedule.Entry);
+    Thread->Schedule.CurrentQueue = SCHED_QUEUE_NONE;
+    return Thread;
+}
+
 /* Scheduler is expected to be locked */
 static VOID PspInsertTimesharedQueue(SCHEDULER *Scheduler,THREAD *Thread, BOOLEAN Preempted) {
     SCHED_CALENDAR_QUEUE *Queue = &Scheduler->Timeshared;
@@ -44,6 +79,7 @@ static VOID PspInsertTimesharedQueue(SCHEDULER *Scheduler,THREAD *Thread, BOOLEA
     }
 
     Thread->Schedule.CalendarIndex = Index;
+    Thread->Schedule.CurrentQueue = SCHED_QUEUE_TIMESHARED;
 
     InsertTailList(
         &Queue->Queues[Index],
@@ -55,8 +91,12 @@ static VOID PspInsertTimesharedQueue(SCHEDULER *Scheduler,THREAD *Thread, BOOLEA
 
 /* Scheduler is expected to be locked */
 FORCE_INLINE VOID PspInsertThread(SCHEDULER *Scheduler, THREAD *Thread, BOOLEAN Preempted) {
-    if (Thread->Priority >= PRIORITY_LOW_REALTIME || Thread->Schedule.Interactive == TRUE) {
-        ASSERT(0);
+    if (Thread->Priority >= PRIORITY_LOW_REALTIME) {
+        PspInsertRealtimeQueue(
+            Scheduler,
+            Thread,
+            Preempted && Thread->Schedule.RemainingQuantum < SCHED_DEFAULT_QUANTUM
+        );
     } else if (Thread->Priority == PRIORITY_IDLE) {
         ASSERT(0);
     } else {
@@ -64,6 +104,24 @@ FORCE_INLINE VOID PspInsertThread(SCHEDULER *Scheduler, THREAD *Thread, BOOLEAN 
     }
 
     Thread->ThreadState = PsThreadReady;
+}
+
+/**
+ * Charge a thread for accumulated runtime, subtracting from Scheduler->LastTime
+ * Re-evaluates the remaining quantum of a thread too
+ */
+static VOID PspChargeRuntime(THREAD *Thread, UINT64 Now) {
+    THREAD_SCHEDULE *Schedule = &Thread->Schedule;
+
+    UINT64 Elapsed = Now - Schedule->LastTime;
+    Schedule->LastTime = Now;
+    Schedule->RunTime += Elapsed;
+
+    if (Elapsed >= Schedule->RemainingQuantum) {
+        Schedule->RemainingQuantum = 0;
+    } else {
+        Schedule->RemainingQuantum -= Elapsed;
+    }
 }
 
 /**
@@ -86,6 +144,8 @@ VOID PspFinishThreadSwitch(THREAD *Previous) {
         Previous->UnlockAfterSwitch = FALSE;
         KeReleaseSpinLockAtDpcLevel(&Previous->Spinlock);
     }
+
+    Cpu->CurrentThread->Schedule.LastTime = HalQueryMonotonicTime();
 
     // Enable interrupts first so KeLowerIrql can dispatch pending DPCs
     KeSetInterruptState(TRUE);
@@ -122,12 +182,67 @@ static THREAD *PspSelectTimesharedThread(SCHEDULER *Scheduler) {
 }
 
 FORCE_INLINE THREAD *PspSelectThread(SCHEDULER *Scheduler) {
-    THREAD *Thread = PspSelectTimesharedThread(Scheduler);
+    THREAD *Thread = PspRemoveRealtimeQueue(Scheduler);
+    if (Thread != NULL) {
+        return Thread;
+    }
+    
+    Thread = PspSelectTimesharedThread(Scheduler);
     if (Thread != NULL) {
         return Thread;
     }
 
     return KeGetCpu()->IdleThread;
+}
+
+/**
+ * Called after the dispatcher is done with its work
+ * IRQL is DISPATCH_LEVEL and IRQs are disabled
+ * Handles yielding the thread
+ */
+VOID PsDispatchScheduler() {
+    KCPU *Cpu = KeGetCpu();
+    THREAD *Current = Cpu->CurrentThread;
+    if (UNLIKELY(Current == NULL)) return;
+
+    SCHEDULER *Scheduler = &Cpu->Scheduler;
+    PspLockSchedulerElevated(Scheduler);
+
+    // Update the current thread's runtime
+    PspChargeRuntime(Current, HalQueryMonotonicTime());
+    
+    // We out of quantum?
+    BOOLEAN QuantumExpired = Current->Schedule.RemainingQuantum == 0;
+    if (QuantumExpired) {
+        Current->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
+    }
+
+    // Determine whether we should switch threads
+    // If the realtime queue has stuff, determine whether its priority wins over us
+    // Otherwise, maybe there's a timeshared thread that we should beat.
+    UINT32 Realtime = Scheduler->Realtime.Bitmap;
+    BOOLEAN ShouldSwitch;
+    if (Realtime != 0) {
+        INT HighestPriority = 31 - __builtin_clz(Realtime);
+
+        ShouldSwitch = 
+            HighestPriority > Current->Priority ||
+            (QuantumExpired && HighestPriority == Current->Priority);
+    } else {
+        ShouldSwitch =
+            Scheduler->Timeshared.Bitmap != 0 &&
+            (Current == Cpu->IdleThread || (QuantumExpired && Current->Priority < PRIORITY_LOW_REALTIME));
+    }
+
+    // If we need to switch, then switch.
+    THREAD *Next = ShouldSwitch ? PspSelectThread(Scheduler) : NULL;
+    PspUnlockSchedulerElevated(Scheduler);
+
+    if (Next != NULL) {
+        Current->ResumeIrql = DISPATCH_LEVEL;
+        PspSwitchThread(Next);
+        KeSetInterruptState(FALSE);
+    }
 }
 
 static VOID PspInitializeTimesharedQueue(SCHEDULER *Scheduler) {
@@ -159,12 +274,12 @@ VOID PspInitializeThreadSchedule(THREAD *Thread) {
     Thread->Priority = Thread->Process->Priority;
     Thread->ResumeIrql = PASSIVE_LEVEL;
     Thread->UnlockAfterSwitch = FALSE;
-    Thread->Schedule.CurrentQueue = SCHED_QUEUE_TIMESHARED;
+    Thread->Schedule.CurrentQueue = SCHED_QUEUE_NONE;
     Thread->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
     Thread->Schedule.RunTime = 0;
     Thread->Schedule.SleepTime = 0;
 
-    // LastTime is updated when the thread is picked for execution at the first time
+    Thread->Schedule.Interactive = FALSE;
     Thread->Schedule.LastTime = 0;
 }
 
@@ -176,8 +291,12 @@ OS_STATUS PsInitializeScheduler() {
     KeInitializeDpc(&Scheduler->Dpc, PspTickSchedulerDpc);
     RtlZeroMemory(&Scheduler->Realtime, sizeof(SCHED_RUNTIME_QUEUE));
     RtlZeroMemory(&Scheduler->Idle, sizeof(SCHED_RUNTIME_QUEUE));
+    for (INT i = 0; i < SCHED_NUM_QUEUES; i++) {
+        InitializeListHead(&Scheduler->Realtime.Queues[i]);
+    }
 
     PspInitializeTimesharedQueue(Scheduler);
+    KeGetCurrentThread()->Schedule.LastTime = HalQueryMonotonicTime();
 
     return STATUS_SUCCESS;
 }
@@ -194,6 +313,15 @@ IONAPI VOID PsReadyThread(THREAD *Thread) {
     // Insert the thread's schedule
     KIRQL SchedIrql = PspLockScheduler(Scheduler);
     PspInsertThread(Scheduler, Thread, FALSE); // Updates ThreadState to PsThreadReady
+    THREAD *Current = KeGetCurrentThread();
+
+    // If this thread beats the current thread then we should yield now
+    if (LIKELY(Current)) {
+        if (Current == KeGetCpu()->IdleThread || (Thread->Priority >= PRIORITY_LOW_REALTIME && Thread->Priority > Current->Priority)) {
+            KeRequestSoftwareInterrupt(DISPATCH_LEVEL);
+        }
+    }
+
     PspUnlockScheduler(Scheduler, SchedIrql);
 
     PsUnlockThread(Thread, Irql);
@@ -220,6 +348,8 @@ IONAPI VOID PsYieldThreadLocked() {
 
     PspUnlockSchedulerElevated(Scheduler);
 
+    PspChargeRuntime(Current, HalQueryMonotonicTime());
+    Current->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
     Current->ResumeIrql = Cpu->Irql;
     Current->UnlockAfterSwitch = TRUE;
     PspSwitchThread(Next);
@@ -242,12 +372,23 @@ IONAPI VOID PsYieldThread() {
     THREAD *Next = Cpu->NextThread;
     if (Next) {
         Cpu->NextThread = NULL;
+    } else if (Current->Priority >= PRIORITY_LOW_REALTIME && (Scheduler->Realtime.Bitmap >> Current->Priority) == 0) {
+        Next = Current;
     } else {
         Next = PspSelectThread(Scheduler);
     }
 
-    // Scheduler can be unlocked here since Current is floating right now
     PspUnlockSchedulerElevated(Scheduler);
+
+    // If we are trying to switch to current don't bother doing anything
+    if (Next == Current || Next == Cpu->IdleThread) {
+        KeSetInterruptState(TRUE);
+        KeLowerIrql(OldIrql);
+        return;
+    }
+
+    PspChargeRuntime(Current, HalQueryMonotonicTime());
+    Current->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
     Current->ResumeIrql = OldIrql;
     PspSwitchThread(Next);
 }

@@ -19,7 +19,7 @@
 #include <ion/ion.h>
 
 #define SCHED_NUM_QUEUES        32  // TODO: must be 32 for now since UINT is used for Bitmap
-#define SCHED_DEFAULT_QUANTUM   30  // in milliseconds
+#define SCHED_DEFAULT_QUANTUM   30000000ULL  // 30 ms in nanoseconds
 
 #define SCHED_TIMESHARED_DISTANCE (PRIORITY_HIGH_USER + 1)
 
@@ -36,10 +36,9 @@ typedef struct _THREAD_SCHEDULE {
     SCHED_QUEUE_TYPE CurrentQueue;
 
     ULONGLONG SleepTime;        // relative ms
-    ULONGLONG RunTime;          // relative ms
-    ULONGLONG LastTime;         // in absolute ms from HalQueryMonotonicTime
-
-    UCHAR RemainingQuantum;
+    ULONGLONG RunTime;          // accumulated ns
+    ULONGLONG LastTime;         // last runtime accounting timestamp in ns
+    ULONGLONG RemainingQuantum; // ns
 
     BOOLEAN Interactive;
     UCHAR CalendarIndex;
