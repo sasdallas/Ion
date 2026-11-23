@@ -121,6 +121,11 @@ FORCE_INLINE LONG KeReadStateEvent(KEVENT *Event) {
     return Event->Header.SignalCount;
 }
 
+/* Fast mutex */
+FORCE_INLINE VOID KeInitializeFastMutex(KFAST_MUTEX *Mutex) { KeInitializePushLock((KPUSH_LOCK*)Mutex); }
+FORCE_INLINE VOID KeAcquireFastMutex(KFAST_MUTEX *Mutex) { KeAcquirePushLockExclusive((KPUSH_LOCK*)Mutex); }
+FORCE_INLINE VOID KeReleaseFastMutex(KFAST_MUTEX *Mutex) { KeReleasePushLockExclusive((KPUSH_LOCK*)Mutex); }
+
 // KeOnBsp only safe if scheduling is disabled!!!
 // otherwise you will get switched off. does unsafe KeGetCpu()->LogicalId read
 FORCE_INLINE BOOLEAN KeOnBsp() {

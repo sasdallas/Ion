@@ -25,6 +25,7 @@
 #include <ion/ke/ke/timer.h>
 #include <ion/ke/ke/pushlock.h>
 #include <ion/ke/ke/event.h>
+#include <ion/ke/ke/mutex.h>
 
 #include <ion/ke/ps/scheduler.h>
 #include <ion/ke/ps/thread.h>
