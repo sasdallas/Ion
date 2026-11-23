@@ -87,6 +87,39 @@ OS_STATUS KeWaitForSingleObject(
     INT Timeout
 );
 
+/* Timer */
+VOID KeInitializeTimerSystem();
+IONAPI VOID KeInitializeTimerEx(KTIMER *Timer, KTIMER_TYPE Type);
+#define KeInitializeTimer(Timer) KeInitializeTimerEx((Timer), NotificationTimer)
+VOID KeUpdateTimers();
+IONAPI BOOLEAN KeSetTimerEx(KTIMER *Timer, LONGLONG DueTime, LONG Period, KDPC *Dpc);
+IONAPI BOOLEAN KeCancelTimer(KTIMER *Timer);
+
+/* Pushlock */
+IONAPI VOID KeInitializePushLock(KPUSH_LOCK *PushLock);
+IONAPI VOID KeAcquirePushLockExclusiveSlow(KPUSH_LOCK *PushLock);
+
+FORCE_INLINE VOID KeAcquirePushLockExclusive(KPUSH_LOCK *PushLock) {
+    if ((InterlockedOrPointer(PushLock, PUSH_LOCK_LOCKED) & PUSH_LOCK_LOCKED) == 0) {
+        return;
+    }
+
+    return KeAcquirePushLockExclusiveSlow(PushLock);
+}
+
+IONAPI VOID KeAcquirePushLockShared(KPUSH_LOCK *PushLock);
+IONAPI VOID KeReleasePushLockShared(KPUSH_LOCK *PushLock);
+IONAPI VOID KeReleasePushLockExclusive(KPUSH_LOCK *PushLock);
+
+/* Event */
+IONAPI VOID KeInitializeEvent(KEVENT *Event, KEVENT_TYPE Type, BOOLEAN State);
+IONAPI VOID KeSetEvent(KEVENT *Event, KPRIORITY Increment);
+IONAPI VOID KeClearEvent(KEVENT *Event);
+IONAPI LONG KeResetEvent(KEVENT *Event);
+
+FORCE_INLINE LONG KeReadStateEvent(KEVENT *Event) {
+    return Event->Header.SignalCount;
+}
 
 // KeOnBsp only safe if scheduling is disabled!!!
 // otherwise you will get switched off. does unsafe KeGetCpu()->LogicalId read

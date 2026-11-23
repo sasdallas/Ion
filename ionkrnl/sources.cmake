@@ -7,6 +7,9 @@ list(APPEND __KE_SOURCE
                     ke/semaphore.c
                     ke/dpc.c
                     ke/wait.c
+                    ke/timer.c
+                    ke/event.c
+                    ke/pushlock.c
 )
 
 if (ARCH STREQUAL "x86_64")

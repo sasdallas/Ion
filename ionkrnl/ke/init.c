@@ -51,8 +51,9 @@ NO_RETURN VOID KeInitialize() {
     // Traps
     KeInitializeBsp();
 
-    // DPC
+    // Other Ke stuff
     KiInitializeDpcQueue();
+    KeInitializeTimerSystem();
 
     // Mm init
     INIT_OR_BUGCHECK(MiInitializePfnDatabase);

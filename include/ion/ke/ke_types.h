@@ -23,6 +23,7 @@
 #include <ion/ke/ke/dpc.h>
 #include <ion/ke/ke/wait.h>
 #include <ion/ke/ke/timer.h>
+#include <ion/ke/ke/pushlock.h>
 #include <ion/ke/ke/event.h>
 
 #include <ion/ke/ps/scheduler.h>

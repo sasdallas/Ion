@@ -13,7 +13,7 @@
 #include <ion/ion.h>
 
 IONAPI VOID KeInitializeSemaphore(KSEMAPHORE *Semaphore, LONG Count, LONG Limit) {
-    PsInitializeDispatcher(&Semaphore->Header);
+    PsInitializeDispatcher(&Semaphore->Header, SatisfyTakeOne);
     Semaphore->Header.SignalCount = (ULONG)Count;
     Semaphore->Limit = Limit;
 }

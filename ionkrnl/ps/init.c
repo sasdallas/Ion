@@ -91,7 +91,6 @@ OS_STATUS PsInitializeSystemProcess() {
         return Status;
     }
 
-
     PsInitializeProcess(PsSystemProcess, "System Process", PRIORITY_DEFAULT);
     PsSystemProcess->AddressSpace = MmKernelAddressSpace;
 

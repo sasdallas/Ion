@@ -13,6 +13,9 @@
 #include <ion/ion.h>
 #include <ion/ke/ke.h>
 
+extern VOID KiCleanupPendingWaiters();
+extern VOID PsDispatchScheduler();
+
 /*
  * Initialize a DPC object
  * The DPC objects take a function pointer and can be queued on one CPU (that being the current)
@@ -64,8 +67,8 @@ VOID KiDpcInterrupt() {
     KeHardwareUpdateIrql(DISPATCH_LEVEL);
 
     // Do some other stuff beforehand
-extern VOID KiCleanupPendingWaiters();
     KiCleanupPendingWaiters();
+    KeUpdateTimers();
 
     // Processing loop for DPCs
     LIST_ENTRY *DpcList = &Cpu->DpcListHead;
@@ -80,6 +83,8 @@ extern VOID KiCleanupPendingWaiters();
         KeSetInterruptState(Restore);
     }
 
+    // Dispatch the scheduler
+    PsDispatchScheduler();
 }
 
 /*

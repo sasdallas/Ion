@@ -26,8 +26,17 @@ static VOID KiDequeueWaitBlock(KWAIT_BLOCK *WaitBlock) {
 
     if (WaitBlock->Thread) {
         WaitBlock->Thread = NULL;
-        Header->WaiterCount -= 1;
         RemoveEntryList(&WaitBlock->Entry);
+    }
+}
+
+static VOID KiSatisfyOneWait(DISPATCH_HEADER *Header) {
+    if (Header->Satisfaction == SatisfyNone) {
+        return;
+    } else if (Header->Satisfaction == SatisfyReset) {
+        Header->SignalCount = 0;
+    } else if (Header->Satisfaction == SatisfyTakeOne) {
+        Header->SignalCount -= 1;
     }
 }
 
@@ -35,7 +44,6 @@ static VOID KiDequeueWaitBlock(KWAIT_BLOCK *WaitBlock) {
 static VOID KiInsertWaitBlock(DISPATCH_HEADER *Header, KWAIT_BLOCK *WaitBlock) {
     WaitBlock->Header = Header;
     InsertTailList(&Header->WaitListHead, &WaitBlock->Entry);
-    Header->WaiterCount += 1;
 }
 
 static BOOLEAN KiIsDispatcherSignalled(DISPATCH_HEADER *Header) {
@@ -120,7 +128,6 @@ INT KeProcessObjectWaiters(VOID *Object, BOOLEAN WakeAll, OS_STATUS Status) {
 
         // Remove it from the list
         RemoveEntryList(&WaitBlock->Entry);
-        Header->WaiterCount -= 1;
 
         // STATUS_SUCCESS is generic, and it means that we should give them the index of the signaller
         if (WakeupStatus == STATUS_SUCCESS) {
@@ -130,6 +137,7 @@ INT KeProcessObjectWaiters(VOID *Object, BOOLEAN WakeAll, OS_STATUS Status) {
         if (KiTryCompleteWait(Thread, WakeupStatus) == TRUE) {
             // We woke up the thread!
             Processed += 1;
+            KiSatisfyOneWait(Header);
             KiTryCleanupThread(Thread, Header);
 
             if (!WakeAll) {
@@ -194,7 +202,7 @@ OS_STATUS KeWaitForMultipleObjects(
             // Only the winner may consume this signal
             BOOLEAN Won = KiTryCompleteWait(Thread, i);
             if (Won) {
-                Header->SignalCount -= 1;
+                KiSatisfyOneWait(Header);
             }
 
             PsUnlockDispatcherElevated(Header);
