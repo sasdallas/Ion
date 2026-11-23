@@ -22,6 +22,7 @@
 #include <ion/ke/ke/priority.h>
 #include <ion/ke/ke/dpc.h>
 #include <ion/ke/ke/wait.h>
+#include <ion/ke/ke/timer.h>
 
 #include <ion/ke/ps/scheduler.h>
 #include <ion/ke/ps/thread.h>
@@ -60,6 +61,10 @@ typedef struct _KCPU {
 
     // DPC queue (interrupts must be disabled)
     LIST_ENTRY DpcListHead;
+
+    // Pairing heap of timers
+    KTIMER *TimerHeap;
+    KSPIN_LOCK TimerHeapLock;
 } KCPU;
 
 #endif
