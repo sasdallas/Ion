@@ -20,6 +20,7 @@
 static THREAD_ID PspNextThreadId = 1;
 
 extern THREAD *PspSwitchContext(THREAD_CONTEXT *Old, THREAD_CONTEXT *New, THREAD *Previous);
+extern NO_RETURN VOID PspSwitchContext2(THREAD_CONTEXT *New);
 extern VOID PspInitializeThreadSchedule(THREAD *Thread);
 extern VOID PspFinishThreadSwitch(THREAD *Previous);
 
@@ -56,11 +57,13 @@ IONAPI OS_STATUS PsCreateThread(
     }
 
     KeInitializeSpinLock(&Thread->Spinlock);
-    Thread->Process = Process;
     Thread->ThreadId = (THREAD_ID)InterlockedExchangeAdd(&PspNextThreadId, 1);
     Thread->ThreadState = PsThreadInitialized;
     Thread->KernelStack = PspAllocateKernelStack();
     ASSERT(Thread->KernelStack != NULL);
+
+    ObReferenceObject(Process);
+    Thread->Process = Process;
 
     // Prepare initial thread context
     PspInitializeThreadContext(Thread, StartRoutine, Context);
@@ -72,6 +75,7 @@ IONAPI OS_STATUS PsCreateThread(
     KIRQL OldIrql;
     KeAcquireSpinLock(&Process->Spinlock, &OldIrql);
     InsertTailList(&Process->ThreadList, &Thread->ProcEntry);
+    Process->ThreadCount++;
     ObReferenceObject(Thread);
     KeReleaseSpinLock(&Process->Spinlock, OldIrql);
 
@@ -85,7 +89,43 @@ IONAPI PROCESS *PsGetCurrentProcess() {
 }
 
 IONAPI NO_RETURN VOID PsExitThread() {
-    KeBugCheckWithMessage("PsExitThread NYI");
+    THREAD *Current = KeGetCurrentThread();
+    ASSERT(Current != NULL && Current != KeGetCpu()->IdleThread);
+    ASSERT(KeGetCpu()->Irql == PASSIVE_LEVEL);
+
+    PsLockThread(Current);
+    Current->ThreadState = PsThreadTerminated;
+    PsYieldThreadLocked();
+    KeBugCheckWithMessage("Terminated thread was rescheduled?!");
+}
+
+VOID PspReapThread(THREAD *Thread) {
+    // We're currently on another thread's context, whatever was switched to post-PsExitThread
+    // TODO:    Maybe fixup this reap process to happen in a DPC instead of invading whatever
+    //          thread we switched to.
+
+    // Free kernel stack
+    VOID *Stack = Thread->KernelStack;
+    Thread->KernelStack = NULL;
+    OS_STATUS Status = MmFreeHeap(Stack);
+    ASSERT(OS_SUCCESS(Status));
+
+    // Decrease thread count
+    PROCESS *Process = Thread->Process;
+    KeAcquireSpinLockAtDpcLevel(&Process->Spinlock);
+    RemoveEntryList(&Thread->ProcEntry);
+    Process->ThreadCount--;
+    KeReleaseSpinLockAtDpcLevel(&Process->Spinlock);
+
+    ObDereferenceObject(Thread); // Process list reference
+}
+
+// DestroyProcedure for the thread object type
+VOID PspDestroyThreadObject(VOID *Object) {
+    THREAD *Thread = Object;
+    if (Thread->Process != NULL) {
+        ObDereferenceObject(Thread->Process);
+    }
 }
 
 // Called with interrupts disabled
@@ -96,10 +136,18 @@ VOID PspSwitchThread(THREAD *Next) {
     Next->ThreadState = PsThreadRunning;
     Cpu->CurrentThread = Next;
 
-    if (Current != NULL && Current->Process->AddressSpace != Next->Process->AddressSpace) {
-        MmuSetAddressSpace(Next->Process->AddressSpace);
-    }
+    MmuSetAddressSpace(Next->Process->AddressSpace);
 
     THREAD *Previous = PspSwitchContext(&Current->Context, &Next->Context, Current);
     PspFinishThreadSwitch(Previous);
+}
+
+// Called with interrupts disabled
+// Variant used to orphan the current thread
+NO_RETURN VOID PspSwitchThread2(THREAD *Next) {
+    KCPU *Cpu = KeGetCpu();
+    Cpu->CurrentThread = Next;
+    Next->ThreadState = PsThreadRunning;
+    MmuSetAddressSpace(Next->Process->AddressSpace);
+    PspSwitchContext2(&Next->Context);
 }

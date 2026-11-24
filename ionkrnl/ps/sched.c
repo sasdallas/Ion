@@ -18,6 +18,7 @@
 #include <ion/hal.h>
 
 extern VOID PspSwitchThread(THREAD *Next);
+extern NO_RETURN VOID PspSwitchThread2(THREAD *Next);
 
 #define KeGetScheduler() (&KeGetCpu()->Scheduler)
 #define PspLockScheduler(Scheduler) ({ KIRQL Irql; KeAcquireSpinLock(&(Scheduler)->Lock, &Irql); Irql; })
@@ -26,6 +27,7 @@ extern VOID PspSwitchThread(THREAD *Next);
 #define PspUnlockSchedulerElevated(Scheduler) ({ KeReleaseSpinLockAtDpcLevel(&(Scheduler)->Lock); })
 
 VOID PspFinishThreadSwitch(THREAD *Previous);
+VOID PspReapThread(THREAD *Thread);
 
 /* Scheduler is expected to be locked. */
 static VOID PspInsertRealtimeQueue(SCHEDULER *Scheduler, THREAD *Thread, BOOLEAN AtHead) {
@@ -143,6 +145,10 @@ VOID PspFinishThreadSwitch(THREAD *Previous) {
     if (Previous != NULL && Previous->UnlockAfterSwitch) {
         Previous->UnlockAfterSwitch = FALSE;
         KeReleaseSpinLockAtDpcLevel(&Previous->Spinlock);
+    }
+
+    if (Previous != NULL && Previous->ThreadState == PsThreadTerminated) {
+        PspReapThread(Previous);
     }
 
     Cpu->CurrentThread->Schedule.LastTime = HalQueryMonotonicTime();
@@ -296,7 +302,9 @@ OS_STATUS PsInitializeScheduler() {
     }
 
     PspInitializeTimesharedQueue(Scheduler);
-    KeGetCurrentThread()->Schedule.LastTime = HalQueryMonotonicTime();
+    
+    THREAD *Thread = KeGetCurrentThread();
+    if (Thread) Thread->Schedule.LastTime = HalQueryMonotonicTime();
 
     return STATUS_SUCCESS;
 }
@@ -391,4 +399,31 @@ IONAPI VOID PsYieldThread() {
     Current->Schedule.RemainingQuantum = SCHED_DEFAULT_QUANTUM;
     Current->ResumeIrql = OldIrql;
     PspSwitchThread(Next);
+}
+
+// Don't call this, used on AP initialization to leave the current thread.
+NO_RETURN VOID PsSwitchToNextThread() {
+    KCPU *Cpu = KeGetCpu();
+    SCHEDULER *Scheduler = &Cpu->Scheduler;
+
+    KeSetInterruptState(FALSE);
+
+    // Go to DISPATCH_LEVEL right now
+    KIRQL OldIrql;
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+
+    // Find another thread
+    PspLockSchedulerElevated(Scheduler);
+
+    THREAD *Current = Cpu->CurrentThread;
+    THREAD *Next = Cpu->NextThread;
+    if (Next) {
+        Cpu->NextThread = NULL;
+    } else {
+        Next = PspSelectThread(Scheduler);
+    }
+
+    ASSERT(Next);
+    PspUnlockSchedulerElevated(Scheduler);
+    PspSwitchThread2(Next);
 }
