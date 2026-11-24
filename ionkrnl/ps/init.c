@@ -125,7 +125,7 @@ OS_STATUS PsInitialize() {
     };
 
     OS_STATUS Status = ObCreateObjectType(
-        "PsThread",
+        "Thread",
         &TypeAttributes,
         &PsThreadObjectType
     );
@@ -136,7 +136,7 @@ OS_STATUS PsInitialize() {
 
     TypeAttributes.DestroyProcedure = NULL;
     Status = ObCreateObjectType(
-        "PsProcess",
+        "Process",
         &TypeAttributes,
         &PsProcessObjectType
     );

@@ -290,8 +290,6 @@ VOID PspInitializeThreadSchedule(THREAD *Thread) {
 }
 
 OS_STATUS PsInitializeScheduler() {
-    DbgPrint("PsInitializeScheduler()\n");
-
     SCHEDULER *Scheduler = KeGetScheduler();
     KeInitializeSpinLock(&Scheduler->Lock);
     KeInitializeDpc(&Scheduler->Dpc, PspTickSchedulerDpc);
