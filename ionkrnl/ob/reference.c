@@ -15,6 +15,8 @@
 #include <ion/ke/mm.h>
 #include <ion/ion.h>
 
+extern OS_STATUS ObpFreeObject(OBJECT_HEADER *Header);
+
 IONAPI VOID ObDereferenceObject(VOID *Body) {
     OBJECT_HEADER *Header = OBJECT_GET_HEADER(Body);
     LONG Count = InterlockedDecrement(&Header->PointerCount);
@@ -25,8 +27,7 @@ IONAPI VOID ObDereferenceObject(VOID *Body) {
             Header->Type->Info.DestroyProcedure(Body);
         }
 
-        OS_STATUS Status = MmFreeHeap(Header);
-        ASSERT(OS_SUCCESS(Status));
+        ObpFreeObject(Header);
     }
 }
 

@@ -36,6 +36,14 @@ static OS_STATUS ObpAllocateObject(
     return STATUS_SUCCESS;
 }
 
+VOID ObpFreeObject(OBJECT_HEADER *Header) {
+    if (Header->ObjectName) {
+        MmFreeHeap(Header->ObjectName);
+    }
+
+    MmFreeHeap(Header);
+}
+
 IONAPI OS_STATUS ObCreateObject(
     OBJECT_TYPE *ObjectType,
     OBJECT_ATTRIBUTES *ObjectAttributes,
@@ -43,10 +51,6 @@ IONAPI OS_STATUS ObCreateObject(
     VOID **ObjectOutput
 )
 {
-    if (ObjectAttributes->ObjectName != NULL) {
-        KeBugCheckWithMessage("ObjectName is NYI");
-    }
-
     if (ObjectAttributes->Flags & ObjectType->Info.InvalidAttributes) {
         return STATUS_INVALID_PARAMETER;
     }
@@ -71,6 +75,17 @@ IONAPI OS_STATUS ObCreateObject(
     Header->Directory = NULL;
     Header->Type = ObjectType;
     Header->Flags = ObjectAttributes->Flags;
+
+    if (ObjectAttributes->ObjectName) {
+        SIZE_T NameLength = RtlStringLength(ObjectAttributes->ObjectName);
+        Header->ObjectName = MmAllocateHeap(MmPagedHeap, NameLength);
+        if (!Header->ObjectName) {
+            ObpFreeObject(Header);
+            return STATUS_NO_MEMORY;
+        }
+    } else {
+        Header->ObjectName = NULL;
+    }
     
     *ObjectOutput = HEADER_GET_OBJECT(Header);
     return STATUS_SUCCESS;

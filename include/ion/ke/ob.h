@@ -16,6 +16,7 @@
 
 #include <ion/base.h>
 #include <ion/ke/ob/object.h>
+#include <ion/ke/ob/handle.h>
 #include <ion/access.h>
 
 FORCE_INLINE VOID ObInitializeObjectAttributes(
@@ -45,6 +46,11 @@ IONAPI OS_STATUS ObCreateObjectType(
 IONAPI VOID ObDereferenceObject(VOID *Body);
 IONAPI VOID ObReferenceObject(VOID *Body);
 
+/* Handle table */
+OS_STATUS ObInitProcess(PROCESS *Parent, PROCESS *Process);
+OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut);
+IONAPI OS_STATUS ObReferenceObjectByHandle(HANDLE Handle, OBJECT_TYPE *Type, KPROCESSOR_MODE AccessMode, VOID **Object);
+IONAPI OS_STATUS ObCloseHandle(HANDLE Handle);
 IONAPI OS_STATUS ObOpenObjectByPointer(
     VOID *Object,
     ULONG HandleAttributes,
@@ -53,7 +59,15 @@ IONAPI OS_STATUS ObOpenObjectByPointer(
     HANDLE **HandleOut
 );
 
+/* Directory */
+IONAPI OS_STATUS ObCreateDirectory(OBJECT_ATTRIBUTES *Attributes, VOID **ObjectOutput);
+
 /* Ob initialization functions */
 OS_STATUS ObInitializeTypeManager();
+OS_STATUS ObInitialize();
+
+/* Ob types */
+extern OBJECT_TYPE *ObDirectoryObjectType;
+extern OBJECT_DIRECTORY *ObRootDirectory;
 
 #endif

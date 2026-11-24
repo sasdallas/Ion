@@ -25,7 +25,10 @@ typedef LONG OS_STATUS;
 #define __WARNING(x) ((ULONG)(x) | (2ULL << 30))
 #define __ERROR(x) ((ULONG)(x) | (3ULL << 30))
 
+// success status
 #define STATUS_SUCCESS                  __SUCCESS(0x0)
+
+// error status
 #define STATUS_INTERNAL_ERROR           __ERROR(0x1)
 #define STATUS_INVALID_PARAMETER        __ERROR(0x2)
 #define STATUS_NO_MEMORY                __ERROR(0x3)
@@ -33,7 +36,9 @@ typedef LONG OS_STATUS;
 #define STATUS_DLL_NOT_FOUND            __ERROR(0x5)
 #define STATUS_ENTRYPOINT_NOT_FOUND     __ERROR(0x6)
 #define STATUS_NOT_FOUND                __ERROR(0x7)
-#define STATUS_WAIT_TIMEOUT             __ERROR(0x8)
+#define STATUS_TIMEOUT                  __ERROR(0x8)
+#define STATUS_INVALID_HANDLE           __ERROR(0x9)
+#define STATUS_TOO_MANY_OPENED_FILES    __ERROR(0x10)
 
 // Wait values that I didn't want to lump with success
 #define STATUS_WAIT_0                   __SUCCESS(0x0)

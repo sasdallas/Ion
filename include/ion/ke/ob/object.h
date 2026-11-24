@@ -15,6 +15,7 @@
 
 #include <ion/base.h>
 #include <ion/ke/mm/heap.h>
+#include <ion/ke/ke/pushlock.h>
 
 #define OB_FLAG_NEW_OBJECT          0x01
 #define OB_FLAG_KERNEL_OBJECT       0x02
@@ -33,6 +34,7 @@ typedef VOID (*OB_DUMP_PROCEDURE)(VOID *Object);
 typedef OS_STATUS (*OB_OPEN_PROCEDURE)(VOID *Object, OB_OPEN_REASON OpenReason, INT HandleCount);
 typedef VOID (*OB_CLOSE_PROCEDURE)(VOID *Object, INT HandleCount);
 typedef VOID (*OB_DESTROY_PROCEDURE)(VOID *Object);
+typedef OS_STATUS (*OB_PARSE_PROCEDURE)(VOID *ParseObject, VOID *ObjectType, CHAR **CompleteName, CHAR **RemainingName, VOID *Context, VOID **Object);
 
 typedef struct _OBJECT_TYPE_ATTRIBUTES {
     ULONG InvalidAttributes; // flags to reject on request 
@@ -42,6 +44,7 @@ typedef struct _OBJECT_TYPE_ATTRIBUTES {
     OB_OPEN_PROCEDURE OpenProcedure;
     OB_CLOSE_PROCEDURE CloseProcedure;
     OB_DESTROY_PROCEDURE DestroyProcedure;
+    OB_PARSE_PROCEDURE ParseProcedure;
 } OBJECT_TYPE_ATTRIBUTES;
 
 typedef struct _OBJECT_TYPE {
@@ -59,7 +62,7 @@ typedef struct _OBJECT_DIRECTORY_ENTRY {
 typedef struct _OBJECT_DIRECTORY {
     OBJECT_DIRECTORY_ENTRY *HashTable[37];
     INT ChildCount;
-    KSPIN_LOCK Lock; // !!! TO BE REPLACED WITH EX_PUSH_LOCK
+    KPUSH_LOCK Lock;
 } OBJECT_DIRECTORY;
 
 typedef struct _OBJECT_ATTRIBUTES {
