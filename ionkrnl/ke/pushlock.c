@@ -98,7 +98,7 @@ static VOID KiWakePushLock(KPUSH_LOCK *PushLock, KPUSH_LOCK Value) {
             Head->Last = NewLast->Last;
 
             KPUSH_LOCK Previous = InterlockedAndPointer(PushLock, ~PUSH_LOCK_WAKING);
-            PUSH_LOCK_ASSERT((Previous & PUSH_LOCK_WAKING) && (Previous & PUSH_LOCK_LOCKED));
+            PUSH_LOCK_ASSERT((Previous & PUSH_LOCK_WAKING) && (Previous & PUSH_LOCK_WAITING));
 
             KiWakePushLockWaiter(Last);
         } else {
