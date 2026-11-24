@@ -47,6 +47,27 @@ PspSwitchContext:
     movq 64(%rdx), %rsp
 
     movq %r8, %rax
+    jmp *72(%rdx)
+
+// RCX = first thread's context
+.global PspSwitchContext2
+PspSwitchContext2:
+    movq %rcx, %rdx
+    xorq %rax, %rax
+
+    leaq 95(%rdx), %r9
+    andq $-16, %r9
+    fxrstor64 (%r9)
+
+    movq 0(%rdx), %r15
+    movq 8(%rdx), %r14
+    movq 16(%rdx), %r13
+    movq 24(%rdx), %r12
+    movq 32(%rdx), %rdi
+    movq 40(%rdx), %rsi
+    movq 48(%rdx), %rbp
+    movq 56(%rdx), %rbx
+    movq 64(%rdx), %rsp
 
     jmp *72(%rdx)
 

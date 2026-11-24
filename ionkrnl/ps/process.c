@@ -11,6 +11,7 @@
  */
 
 #include <ion/ke/ke.h>
+#include <ion/ke/ob.h>
 #include <ion/ke/ps.h>
 #include <ion/ion.h>
 
@@ -21,8 +22,9 @@ static LONG PspLastPid = 0;
 KSPIN_LOCK PspProcessListLock;
 LIST_ENTRY PspProcessList;
 
-VOID PsInitializeProcess(PROCESS *Process, CHAR *ImageName, KPRIORITY Priority) {
+VOID PsInitializeProcess(PROCESS *Process, PROCESS *Parent, CHAR *ImageName, KPRIORITY Priority) {
     Process->Priority = Priority;
+    Process->ParentPid = Parent ? Parent->Pid : 0;
     Process->Pid = InterlockedIncrement(&PspLastPid);
     Process->AddressSpace = NULL;
     
@@ -31,6 +33,7 @@ VOID PsInitializeProcess(PROCESS *Process, CHAR *ImageName, KPRIORITY Priority) 
 
     KeInitializeSpinLock(&Process->Spinlock);
     RtlCopyStringN(Process->ImageName, ImageName, sizeof(Process->ImageName));
+    ASSERT(ObInitProcess(Parent, Process) == STATUS_SUCCESS);
 }
 
 OS_STATUS PsInitializeProcessManager() {

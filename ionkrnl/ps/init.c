@@ -24,6 +24,11 @@ OBJECT_TYPE *PsProcessObjectType = NULL;
 PROCESS *PsSystemProcess = NULL;
 THREAD *PsInitializationThread = NULL;
 
+/* Idle process */
+PROCESS *PsIdleProcess = NULL;
+
+VOID PspDestroyThreadObject(VOID *Object);
+
 static VOID PspIdleLoop(VOID*) {
     DbgPrint("PspIdleLoop: CPU %u is idling !\n", KeGetCpu()->LogicalId);
 
@@ -42,25 +47,28 @@ OS_STATUS PsInitializeIdleProcess() {
     );
 
     // Create the Idle process
-    PROCESS *IdleProcess;
     OS_STATUS Status = ObCreateObject(
         PsProcessObjectType,
         &IdleAttributes,
         sizeof(PROCESS),
-        (VOID**)&IdleProcess
+        (VOID**)&PsIdleProcess
     );
 
     if (!OS_SUCCESS(Status)) {
         return Status;
     }
 
-    PsInitializeProcess(IdleProcess, "Idle", PRIORITY_IDLE);
-    IdleProcess->AddressSpace = MmKernelAddressSpace;
+    PsInitializeProcess(PsIdleProcess, NULL, "Idle", PRIORITY_IDLE);
+    PsIdleProcess->AddressSpace = MmKernelAddressSpace;
 
+    return STATUS_SUCCESS;
+}
+
+OS_STATUS PsInitializeIdleThread() {
     // Create the Idle thread
     THREAD *IdleThread;
-    Status = PsCreateThread(
-        IdleProcess,
+    OS_STATUS Status = PsCreateThread(
+        PsIdleProcess,
         PspIdleLoop,
         NULL,
         &IdleThread
@@ -70,7 +78,6 @@ OS_STATUS PsInitializeIdleProcess() {
         return Status;
     }
 
-    KeGetCpu()->IdleProcess = IdleProcess;
     KeGetCpu()->IdleThread = IdleThread;
     return STATUS_SUCCESS;
 }
@@ -91,11 +98,15 @@ OS_STATUS PsInitializeSystemProcess() {
         return Status;
     }
 
-    PsInitializeProcess(PsSystemProcess, "System Process", PRIORITY_DEFAULT);
+    PsInitializeProcess(PsSystemProcess, NULL, "System Process", PRIORITY_DEFAULT);
     PsSystemProcess->AddressSpace = MmKernelAddressSpace;
 
     // Create the initialization thread
-    PsCreateThread(PsSystemProcess, NULL, NULL, &PsInitializationThread);
+    Status = PsCreateThread(PsSystemProcess, NULL, NULL, &PsInitializationThread);
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
     KeGetCpu()->CurrentThread = PsInitializationThread;
     PsInitializationThread->ThreadState = PsThreadRunning;
 
@@ -107,7 +118,7 @@ OS_STATUS PsInitialize() {
     OBJECT_TYPE_ATTRIBUTES TypeAttributes = {
         .OpenProcedure = NULL,
         .CloseProcedure = NULL,
-        .DestroyProcedure = NULL,
+        .DestroyProcedure = PspDestroyThreadObject,
         .DumpProcedure = NULL,
         .InvalidAttributes = 0,
         .TargetHeap = MmNonpagedHeap,
@@ -123,6 +134,7 @@ OS_STATUS PsInitialize() {
         return Status;
     }
 
+    TypeAttributes.DestroyProcedure = NULL;
     Status = ObCreateObjectType(
         "PsProcess",
         &TypeAttributes,

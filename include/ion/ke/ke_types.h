@@ -52,9 +52,8 @@ typedef struct _KCPU {
     // Locked under Scheduler.Lock and shouldn't be modified
     THREAD *NextThread;
 
-    // Idle processor + thread
+    // Idle thread
     THREAD *IdleThread;
-    PROCESS *IdleProcess;
 
     // Wait clean list
     THREAD *PendingUnwaitCleanupList;
