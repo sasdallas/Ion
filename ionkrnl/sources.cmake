@@ -18,6 +18,7 @@ if (ARCH STREQUAL "x86_64")
                     ke/x86_64/dbg.c
                     ke/x86_64/cpu.c
                     ke/x86_64/trap.S
+                    ke/x86_64/smp.c
     )
 else()
     message(FATAL_ERROR "Unsupported kernel architecture ${ARCH}")
@@ -52,6 +53,9 @@ list(APPEND __OB_SOURCE
                     ob/create.c
                     ob/type.c
                     ob/reference.c
+                    ob/init.c
+                    ob/handle.c
+                    ob/dir.c
 )
 
 list(APPEND __PS_SOURCE
@@ -67,4 +71,9 @@ if (ARCH STREQUAL "x86_64")
     )
 endif()
 
-list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE})
+list(APPEND __EX_SOURCE
+                    ex/init.c
+                    ex/evntobj.c
+)
+
+list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE} ${__EX_SOURCE})

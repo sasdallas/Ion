@@ -15,6 +15,7 @@
 #include <ion/ke/ob.h>
 #include <ion/ke/ldr.h>
 #include <ion/ke/ps.h>
+#include <ion/ke/ex.h>
 #include <ion/hal.h>
 #include <ion/ion.h>
 
@@ -77,23 +78,15 @@ NO_RETURN VOID KeInitialize() {
     INIT_OR_BUGCHECK(PsInitialize);
     INIT_OR_BUGCHECK(PsInitializeSystemProcess);
     INIT_OR_BUGCHECK(PsInitializeIdleProcess);
+    INIT_OR_BUGCHECK(PsInitializeIdleThread);
     INIT_OR_BUGCHECK(PsInitializeScheduler);
 
     // Ready
     ENABLE_INTERRUPTS();
 
-    for (INT i = 0; i < 10; i++) {
-        THREAD *Thread;
-        PsCreateThread(PsSystemProcess, KeTestThread, NULL, &Thread);
-        PsReadyThread(Thread);
-    }
-
-    for (;;) PsYieldThread();
-
-    DbgPrint("KeInitialize has finished, halting!\n");
-    for (;;) {
-        KeHaltExecution();
-    }
+    // Ps initialization already setup our init thread
+    ExInitialize();
+    for (;;);
 }
 
 IONAPI LOADER_PARAMETER_BLOCK *KeGetLoaderParameterBlock() {

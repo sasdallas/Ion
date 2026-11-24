@@ -45,13 +45,15 @@ IONAPI VOID PsYieldThreadLocked(); // enter with thread lock held, exits with th
 IONAPI VOID PsReadyThread(THREAD *Thread);
 IONAPI VOID PsTickScheduler();
 IONAPI NO_RETURN VOID PsExitThread();
+NO_RETURN VOID PsSwitchToNextThread(); // Don't use
 
-VOID PsInitializeProcess(PROCESS *Process, CHAR *ImageName, KPRIORITY Priority);
+VOID PsInitializeProcess(PROCESS *Process, PROCESS *Parent, CHAR *ImageName, KPRIORITY Priority);
 
 OS_STATUS PsInitialize();
 OS_STATUS PsInitializeProcessManager();
 OS_STATUS PsInitializeSystemProcess();
 OS_STATUS PsInitializeScheduler();
 OS_STATUS PsInitializeIdleProcess();
+OS_STATUS PsInitializeIdleThread();
 
 #endif
