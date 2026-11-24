@@ -30,6 +30,7 @@ FORCE_INLINE VOID ObInitializeObjectAttributes(
     Attributes->RootDirectory = RootHandle; 
 }
 
+/* Creation */
 IONAPI OS_STATUS ObCreateObject(
     OBJECT_TYPE *ObjectType,
     OBJECT_ATTRIBUTES *ObjectAttributes,
@@ -43,6 +44,7 @@ IONAPI OS_STATUS ObCreateObjectType(
     OBJECT_TYPE **TypeOutput
 );
 
+/* Referencing */
 IONAPI VOID ObDereferenceObject(VOID *Body);
 IONAPI VOID ObReferenceObject(VOID *Body);
 
@@ -60,14 +62,31 @@ IONAPI OS_STATUS ObOpenObjectByPointer(
 );
 
 /* Directory */
-IONAPI OS_STATUS ObCreateDirectory(OBJECT_ATTRIBUTES *Attributes, VOID **ObjectOutput);
+IONAPI OS_STATUS ObCreateDirectoryObject(OBJECT_ATTRIBUTES *Attributes, VOID **ObjectOutput);
 
 /* Ob initialization functions */
 OS_STATUS ObInitializeTypeManager();
 OS_STATUS ObInitialize();
 
+/* Private */
+OS_STATUS ObpLookupObjectName(
+    HANDLE RootHandle,
+    CHAR *ObjectString,
+    ULONG Attributes,
+    OBJECT_TYPE *ObjectType,
+    VOID *ParseContext,
+    VOID *InsertObject,
+    VOID **FoundObject
+);
+
+
+OS_STATUS ObpLinkObject(OBJECT_DIRECTORY *Directory, VOID *Object, CHAR *Name, SIZE_T NameLength);
+VOID *ObpLookupEntryDirectory(OBJECT_DIRECTORY *Directory, CHAR *ComponentName, SIZE_T NameLength);
+
 /* Ob types */
 extern OBJECT_TYPE *ObDirectoryObjectType;
-extern OBJECT_DIRECTORY *ObRootDirectory;
+extern OBJECT_DIRECTORY *ObpRootDirectoryObject;
+extern OBJECT_DIRECTORY *ObpObjectTypesDirectoryObject;
+extern HANDLE ObRootDirectory, ObObjectTypesDirectory;
 
 #endif

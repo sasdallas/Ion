@@ -271,6 +271,24 @@ OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut) {
 
         ObDereferenceObject(Object);
     }
+    
+    // If we have name information, insert the object.
+    if (Header->ObjectName) {
+        VOID *ExistingObject = NULL;
+        Status = ObpLookupObjectName(
+            Header->RootHandle,
+            Header->ObjectName,
+            Header->Flags,
+            Header->Type,
+            NULL, // TODO
+            Object,
+            &ExistingObject
+        );
+
+        if (ExistingObject != Object) {
+            assert(0 && "Object already exists!");
+        }
+    }
 
     return Status;
 }
@@ -286,13 +304,11 @@ IONAPI OS_STATUS ObReferenceObjectByHandle(HANDLE Handle, OBJECT_TYPE *Type, KPR
     }
 
     HANDLE_TABLE *Table = PsGetCurrentProcess()->HandleTable;
-    DbgPrint("Table = %p\n", Table);
 
     KPUSH_LOCK *Lock = &Table->HandleTableLock[Index % 4];
     KeAcquirePushLockShared(Lock);
-    HANDLE_TABLE_ENTRY *Entry = ObpLookupHandleEntry(Table, Handle);
 
-    DbgPrint("Entry = %p Entry->Object = %p\n", Entry, Entry->Object);
+    HANDLE_TABLE_ENTRY *Entry = ObpLookupHandleEntry(Table, Handle);
 
     OS_STATUS Status = STATUS_INVALID_HANDLE;
     if (Entry && Entry->Object) {
@@ -315,7 +331,33 @@ IONAPI OS_STATUS ObReferenceObjectByHandle(HANDLE Handle, OBJECT_TYPE *Type, KPR
  * Close a handle
  */
 IONAPI OS_STATUS ObCloseHandle(HANDLE Handle) {
-    assert(0 && "ObCloseHandle NYI");
+    ULONG_PTR Index = OBJ_HANDLE_TO_INDEX(Handle);
+
+    HANDLE_TABLE *Table = PsGetCurrentProcess()->HandleTable;
+    KPUSH_LOCK *Lock = &Table->HandleTableLock[Index % 4];
+    KeAcquirePushLockExclusive(Lock);
+
+    HANDLE_TABLE_ENTRY *Entry = ObpLookupHandleEntry(Table, Handle);
+    if (!Entry || !Entry->Object) {
+        KeReleasePushLockExclusive(Lock);
+        return STATUS_INVALID_HANDLE;
+    }
+
+    VOID *Object = Entry->Object;
+    Entry->Object = NULL;
+    InterlockedDecrement(&Table->HandleCount);
+
+    KeReleasePushLockExclusive(Lock);
+
+    OBJECT_HEADER *Header = OBJECT_GET_HEADER(Object);
+
+    LONG HandleCount = InterlockedDecrement((LONG*)&Header->HandleCount);
+    if (Header->Type->Info.CloseProcedure) {
+        Header->Type->Info.CloseProcedure(Object, HandleCount);
+    }
+
+    ObDereferenceObject(Object);
+    return STATUS_SUCCESS;
 }
 
 /**

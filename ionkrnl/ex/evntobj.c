@@ -36,8 +36,13 @@ IONAPI OS_STATUS OsSetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousSt
         return Status;
     }
 
-    DbgPrint("ObReferenceObjectByHandle: %p\n", Event);
+    if (PreviousState) {
+        ASSERT(0 && "PreviousState NYI");
+    }
 
+    KeSetEvent(Event, 0);
+
+    ObDereferenceObject(Event);
     return STATUS_SUCCESS;
 }
 

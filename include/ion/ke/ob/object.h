@@ -22,6 +22,10 @@
 #define OB_FLAG_PERMANENT_OBJECT    0x04
 #define OB_FLAG_EXCLUSIVE_OBJECT    0x08
 
+#define OB_DIR_HASH_BUCKETS         37
+
+#define OB_PATH_SEPARATOR           '/'
+
 typedef enum _OB_OPEN_REASON {
     ObCreateHandle = 0,
     ObOpenHandle = 1,
@@ -56,11 +60,11 @@ typedef struct _OBJECT_TYPE {
 typedef struct _OBJECT_DIRECTORY_ENTRY {
     struct _OBJECT_DIRECTORY_ENTRY *Link;
     VOID *Object;
-    ULONG Hash;
+    UINT32 Hash;
 } OBJECT_DIRECTORY_ENTRY;
 
 typedef struct _OBJECT_DIRECTORY {
-    OBJECT_DIRECTORY_ENTRY *HashTable[37];
+    OBJECT_DIRECTORY_ENTRY *HashTable[OB_DIR_HASH_BUCKETS];
     INT ChildCount;
     KPUSH_LOCK Lock;
 } OBJECT_DIRECTORY;
@@ -78,6 +82,7 @@ typedef struct _OBJECT_HEADER {
     ULONG Flags;
 
     OBJECT_DIRECTORY *Directory;
+    HANDLE RootHandle;
     OBJECT_TYPE *Type;
     CHAR *ObjectName;
 

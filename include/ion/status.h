@@ -39,6 +39,7 @@ typedef LONG OS_STATUS;
 #define STATUS_TIMEOUT                  __ERROR(0x8)
 #define STATUS_INVALID_HANDLE           __ERROR(0x9)
 #define STATUS_TOO_MANY_OPENED_FILES    __ERROR(0x10)
+#define STATUS_OBJECT_TYPE_MISMATCH     __ERROR(0x11)
 
 // Wait values that I didn't want to lump with success
 #define STATUS_WAIT_0                   __SUCCESS(0x0)

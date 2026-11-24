@@ -28,6 +28,7 @@ static const CHAR* RtlStatusStringsError[] = {
     "An operation timed out.",
     "An invalid HANDLE was specified.",
     "Too many files are opened.",
+    "The object type given does not match the object type expected."
 };
 
 

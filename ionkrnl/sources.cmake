@@ -56,6 +56,7 @@ list(APPEND __OB_SOURCE
                     ob/init.c
                     ob/handle.c
                     ob/dir.c
+                    ob/name.c
 )
 
 list(APPEND __PS_SOURCE

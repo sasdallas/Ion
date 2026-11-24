@@ -16,21 +16,26 @@
 #include <ion/ion.h>
 
 /* Primary type list */
-static LIST_ENTRY ObpTypeList;
-static KSPIN_LOCK ObpTypeListLock;
+LIST_ENTRY ObpTypeList;
 
-/* Pool */
-static MM_POOL *ObpTypePool;
+/* Object type... type */
+static OBJECT_TYPE ObpObjectTypeType = {
+    .Info = {
+        .TargetHeap = NULL,
+        .OpenProcedure = NULL,
+        .CloseProcedure = NULL,
+        .DestroyProcedure = NULL,
+        .DumpProcedure = NULL,
+        .ParseProcedure = NULL,
+        .InvalidAttributes = 0,
+    },
+    .Name = "ObjectType",
+};
 
 OS_STATUS ObInitializeTypeManager() {
     InitializeListHead(&ObpTypeList);
-    KeInitializeSpinLock(&ObpTypeListLock);
-
-    OS_STATUS Status = MmCreatePool("ObType", MM_POOL_NONPAGED, sizeof(OBJECT_TYPE), POOL_ALIGN_NONE, &ObpTypePool);
-    if (!OS_SUCCESS(Status)) {
-        return Status;
-    }
-    
+    InitializeListHead(&ObpObjectTypeType.TypeList);
+    ObpObjectTypeType.Info.TargetHeap = MmNonpagedHeap;
     return STATUS_SUCCESS;
 }
 
@@ -40,22 +45,47 @@ IONAPI OS_STATUS ObCreateObjectType(
     OBJECT_TYPE **TypeOutput
 )
 {
-    OBJECT_TYPE *Type = MmAllocatePool(ObpTypePool);
-    if (Type == NULL) {
-        return STATUS_NO_MEMORY;
+    // XXX: This abuses a semantic of the object manager where it only attempts to insert
+    //      objects into the namespace on ObInsertObject, but always allocates ObjectName if present.
+    //      ObpPrepareObjectTypesDirectory() will fixup types created before ObObjectTypesDirectory
+    //      was able to initialize by setting RootDirectory.
+    OBJECT_ATTRIBUTES Attributes = {
+        .ObjectName = TypeName,
+        .RootDirectory = ObObjectTypesDirectory,
+        .Flags = OB_FLAG_PERMANENT_OBJECT,
+    };
+
+    // Create the object type
+    OBJECT_TYPE *Type;
+    OS_STATUS Status = ObCreateObject(&ObpObjectTypeType, &Attributes, sizeof(OBJECT_TYPE), (VOID**)&Type);
+    if (!OS_SUCCESS(Status)) {
+        return Status;
     }
 
+    // Setup type information
     Type->Name = TypeName;
     RtlCopyMemory(&Type->Info, TypeAttributes, sizeof(OBJECT_TYPE_ATTRIBUTES));
-    
-    KIRQL Irql;
-    KeAcquireSpinLock(&ObpTypeListLock, &Irql);
+
+    // Insert into object type directory if available.
+    // Object types created before this will be inserted through some hacky code in
+    // ObpPrepareObjectTypesDirectory(). The Header already had its TypeName allocated for it
+    if (ObpObjectTypesDirectoryObject != NULL) {
+        OBJECT_HEADER *Header = OBJECT_GET_HEADER(Type);
+        Header->Directory = ObObjectTypesDirectory;
+        Status = ObpLinkObject(ObpObjectTypesDirectoryObject, Type, Type->Name, RtlStringLength(Type->Name));
+        if (!OS_SUCCESS(Status)) {
+            ObDereferenceObject(Type);
+            return Status;
+        }
+    }
+
+    // Type is finished
     InsertTailList(&ObpTypeList, &Type->TypeList);
-    KeReleaseSpinLock(&ObpTypeListLock, Irql);
 
     if (TypeOutput) {
         *TypeOutput = Type;
     }
+
 
     return STATUS_SUCCESS;
 }

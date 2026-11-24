@@ -22,4 +22,6 @@ IONAPI OS_STATUS OsSetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousSt
 IONAPI OS_STATUS OsClearEvent(IN HANDLE EventHandle);
 IONAPI OS_STATUS OsResetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousState);
 
+IONAPI OS_STATUS OsCreateDirectoryObject(OUT HANDLE *DirectoryHandle, IN ACCESS_MASK DesiredAccess, IN OBJECT_ATTRIBUTES *ObjectAttributes);
+
 #endif

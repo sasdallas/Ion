@@ -73,16 +73,20 @@ IONAPI OS_STATUS ObCreateObject(
     Header->HandleCount = 0;
     Header->ObjectName = NULL;
     Header->Directory = NULL;
+    Header->RootHandle = ObjectAttributes->RootDirectory;
     Header->Type = ObjectType;
     Header->Flags = ObjectAttributes->Flags;
 
     if (ObjectAttributes->ObjectName) {
         SIZE_T NameLength = RtlStringLength(ObjectAttributes->ObjectName);
-        Header->ObjectName = MmAllocateHeap(MmPagedHeap, NameLength);
+        Header->ObjectName = MmAllocateHeap(MmPagedHeap, NameLength + 1);
         if (!Header->ObjectName) {
             ObpFreeObject(Header);
             return STATUS_NO_MEMORY;
         }
+
+        RtlCopyMemory(Header->ObjectName, ObjectAttributes->ObjectName, NameLength);
+        Header->ObjectName[NameLength] = 0;
     } else {
         Header->ObjectName = NULL;
     }
