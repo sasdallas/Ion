@@ -93,4 +93,9 @@ static inline LONG InterlockedOr(volatile LONG *Target, LONG Value) {
 #define InterlockedOrPointer(Target, Value) InterlockedOr(Target, Value)
 #endif
 
+// not actually an NT function
+static inline LONG InterlockedLoad(volatile LONG *Target) {
+    return __atomic_load_n(Target, __ATOMIC_SEQ_CST);
+}
+
 #endif
