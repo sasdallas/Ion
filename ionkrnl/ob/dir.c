@@ -248,7 +248,7 @@ IONAPI OS_STATUS OsCreateDirectoryObject(OUT HANDLE *DirectoryHandle, IN ACCESS_
     OS_STATUS Status = ObCreateDirectoryObject(ObjectAttributes, &DirectoryObject);
     if (!OS_SUCCESS(Status)) return Status;
 
-    Status = ObInsertObject(DirectoryObject, DirectoryHandle);
+    Status = ObInsertObject(DirectoryObject, NULL, DirectoryHandle);
     if (!OS_SUCCESS(Status)) return Status;
 
     return STATUS_SUCCESS;

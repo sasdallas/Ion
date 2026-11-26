@@ -204,8 +204,9 @@ static OS_STATUS ObpCreateHandle(HANDLE_TABLE *Table, VOID *Object, HANDLE *Hand
             continue;
         }
 
-        HANDLE Handle = (HANDLE)OBJ_INDEX_TO_HANDLE(OldHead);
+        HANDLE Handle = (HANDLE)(ULONG_PTR)OldHead;
         HANDLE_TABLE_ENTRY *Entry = ObpLookupHandleEntry(Table, Handle);
+        ASSERT(Entry != NULL);
 
         // The CAS here synchronizes the case when two threads observe FirstFreeHandle
         // at the same time for the same value.
@@ -239,17 +240,17 @@ OS_STATUS ObInitProcess(PROCESS *Parent, PROCESS *Process) {
 }
 
 /**
- * Insert an object into the current process' handle table.
+ * Inserts an object into a process' handle table. Consumes any previous references
+ * given to the object and makes them into a HANDLE reference.
+ * 
+ * TODO: NewObject support in OB_FLAG_OPEN_IF
  */
-OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut) {
-    PROCESS *Process = PsGetCurrentProcess();
-
+OS_STATUS ObInsertObject(VOID *Object, VOID **NewObject, HANDLE *HandleOut) {
     OBJECT_HEADER *Header = OBJECT_GET_HEADER(Object);
+    PROCESS *Process = (Header->Flags & OB_FLAG_KERNEL_OBJECT) ? PsSystemProcess : PsGetCurrentProcess();
+
     OBJECT_TYPE_ATTRIBUTES *Info = &Header->Type->Info;
 
-    // The handle owns a reference independent of the caller's reference
-    ObReferenceObject(Object);
-    
     // Open the object, if needed
     LONG HandleCount = InterlockedIncrement((LONG*)&Header->HandleCount);
     if (Info->OpenProcedure != NULL) {
@@ -270,6 +271,7 @@ OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut) {
         }
 
         ObDereferenceObject(Object);
+        return Status;
     }
     
     // If we have name information, insert the object.
@@ -285,9 +287,29 @@ OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut) {
             &ExistingObject
         );
 
-        if (ExistingObject != Object) {
-            assert(0 && "Object already exists!");
+        if (!OS_SUCCESS(Status) || ExistingObject != Object) {
+            // The insertion failed (or it already exists), remove the entry from the handle table.
+            HANDLE_TABLE *Table = Process->HandleTable;
+            HANDLE_TABLE_ENTRY *Entry = ObpLookupHandleEntry(Table, *HandleOut);
+            ASSERT(Entry && Entry->Object == Object);
+            Entry->Object = NULL;
+            InterlockedDecrement(&Table->HandleCount);
+
+            // Close the object
+            HandleCount = InterlockedDecrement((LONG*)&Header->HandleCount);
+            if (Info->OpenProcedure != NULL && Info->CloseProcedure != NULL) {
+                Info->CloseProcedure(Object, HandleCount);
+            }
+
+            ObDereferenceObject(Object);
+
+            // ExistingObject has a reference if it gave one to us
+            if (ExistingObject) ObDereferenceObject(ExistingObject);
+            return OS_SUCCESS(Status) ? STATUS_OBJECT_NAME_COLLISION : Status;
         }
+
+        // ObpLookupObjectName returned a separate lookup reference.
+        ObDereferenceObject(ExistingObject);
     }
 
     return Status;
@@ -368,8 +390,71 @@ IONAPI OS_STATUS ObOpenObjectByPointer(
     ULONG HandleAttributes,
     ACCESS_MASK DesiredAccess,
     OBJECT_TYPE *ObjectType,
-    HANDLE **HandleOut
+    HANDLE *HandleOut
 )
 {
-    assert(0 && "ObOpenObjectByPointer NYI");
+    OBJECT_HEADER *Header = OBJECT_GET_HEADER(Object);
+
+    if (ObjectType && Header->Type != ObjectType) {
+        return STATUS_OBJECT_TYPE_MISMATCH;
+    }
+
+    PROCESS *Process = (HandleAttributes & OB_FLAG_KERNEL_OBJECT) ? PsSystemProcess : PsGetCurrentProcess();
+    OBJECT_TYPE_ATTRIBUTES *Info = &Header->Type->Info;
+
+    ObReferenceObject(Object);
+
+    // Open the thingy
+    LONG HandleCount = InterlockedIncrement((LONG*)&Header->HandleCount);
+    if (Info->OpenProcedure) {
+        OS_STATUS Status = Info->OpenProcedure(Object, ObOpenHandle, HandleCount);
+        if (!OS_SUCCESS(Status)) {
+            InterlockedDecrement((LONG*)&Header->HandleCount);
+            ObDereferenceObject(Object);
+            return Status;
+        }
+    }
+
+    // Create the handle for the process
+    OS_STATUS Status = ObpCreateHandle(Process->HandleTable, Object, HandleOut);
+    if (!OS_SUCCESS(Status)) {
+        HandleCount = InterlockedDecrement((LONG*)&Header->HandleCount);
+        if (Info->CloseProcedure) Info->CloseProcedure(Object, HandleCount);
+        ObDereferenceObject(Object);
+    }
+
+    return Status;
+}
+
+/**
+ * Open an object by a name.
+ */
+IONAPI OS_STATUS ObOpenObjectByName(
+    OBJECT_ATTRIBUTES *Attributes,
+    OBJECT_TYPE *ObjectType,
+    KPROCESSOR_MODE AccessMode,
+    ACCESS_MASK DesiredAccess,
+    VOID *ParseContext,
+    HANDLE *Handle
+)
+{
+    VOID *Object;
+    OS_STATUS Status = ObpLookupObjectName(
+        NULL,
+        Attributes->ObjectName,
+        Attributes->Flags,
+        ObjectType,
+        ParseContext,
+        NULL,
+        &Object
+    );
+
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    Status = ObOpenObjectByPointer(Object, Attributes->Flags, DesiredAccess, ObjectType, Handle);
+    ObDereferenceObject(Object);
+
+    return Status;
 }

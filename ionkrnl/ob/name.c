@@ -107,17 +107,7 @@ OS_STATUS ObpLookupObjectName(
             if (NextObject == NULL) {
                 // Didn't get an object, but maybe they wanted to insert it.
                 if (InsertObject && !Remaining.Length) {
-                    Status = ObpLinkObject(Directory, InsertObject, Component.Buffer, Component.Length);
-                    if (!OS_SUCCESS(Status)) {
-                        goto Cleanup;
-                    }
-
-                    // Upon a success, we need to reference it again to keep it here.
-                    ObReferenceObject(InsertObject);
-                    NextObject = InsertObject;
-
-                    // We need to also move Component into it
-                    CHAR *ComponentName = MmAllocateHeap(MmPagedHeap, Component.Length+1);
+                    CHAR *ComponentName = MmAllocateHeap(MmPagedHeap, Component.Length + 1);
                     if (ComponentName == NULL) {
                         Status = STATUS_NO_MEMORY;
                         goto Cleanup;
@@ -125,6 +115,20 @@ OS_STATUS ObpLookupObjectName(
 
                     RtlCopyMemory(ComponentName, Component.Buffer, Component.Length);
                     ComponentName[Component.Length] = 0;
+
+                    Status = ObpLinkObject(Directory, InsertObject, Component.Buffer, Component.Length);
+                    if (!OS_SUCCESS(Status)) {
+                        MmFreeHeap(ComponentName);
+                        goto Cleanup;
+                    }
+
+                    // The directory owns a reference to the inserted object.
+                    ObReferenceObject(InsertObject);
+
+                    // The lookup result also needs its own reference.
+                    ObReferenceObject(InsertObject);
+
+                    NextObject = InsertObject;
 
                     // Replace the names
                     OBJECT_HEADER *Header = OBJECT_GET_HEADER(InsertObject);

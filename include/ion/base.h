@@ -39,9 +39,13 @@
 #else
 #define IONAPI __declspec(dllimport)
 #endif
+
+#define DRVEXPORT __declspec(dllexport)
+
 #else
 #define IONAPI
 #define IONHALAPI
+#define DRVEXPORT
 #endif
 
 // Helper macros

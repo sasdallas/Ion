@@ -26,5 +26,6 @@ VOID DbgPrintMsg(const CHAR* Message, ...);
 #define __HELPER1(x) #x
 #define __HELPER2(x) __HELPER1(x)
 #define DbgPrint(stmt, ...) DbgPrintMsg("(" __FILE__ ":" __HELPER2(__LINE__)  ") " stmt, ## __VA_ARGS__)
+#define DbgPrintError(stmt, status) DbgPrintMsg("(" __FILE__ ":" __HELPER2(__LINE__) ") " stmt ": %s (0x%08x)\n", RtlStatusToString(status), (status))
 
 #endif

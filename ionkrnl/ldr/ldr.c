@@ -22,14 +22,13 @@ extern CHAR __ImageBase;
 static MM_POOL *LdrpDllPool = NULL;
 
 /* Loaded DLL list */
-static LIST_ENTRY LdrLoadedDllList;
+LIST_ENTRY LdrLoadedDllList = { 0 };
 SIZE_T LdrNrLoadedDlls = 0;
-static BOOLEAN LdrReady = FALSE;
 
-static OS_STATUS LdrAddNewImage(VOID *ImageBase, LOADED_DLL **DllOut) {
+static OS_STATUS LdrpAddNewImage(VOID *ImageBase, LOADED_DLL **DllOut) {
     IMAGE_NT_HEADERS *NtHeaders = RtlImageNtHeaders(ImageBase);
     if (NtHeaders == NULL) {
-        DbgPrint("LdrAddNewImage detected invalid image\n");
+        DbgPrint("LdrpAddNewImage detected invalid image\n");
         return STATUS_INVALID_IMAGE;
     }
 
@@ -53,6 +52,90 @@ static OS_STATUS LdrAddNewImage(VOID *ImageBase, LOADED_DLL **DllOut) {
     LdrNrLoadedDlls += 1;
 
     *DllOut = Dll;
+
+    return STATUS_SUCCESS;
+}
+
+
+static OS_STATUS LdrpRelocateImage(VOID *ImageBase, IMAGE_NT_HEADERS *NtHeaders) {
+    UINT_PTR Delta = (UINT_PTR)ImageBase - NtHeaders->OptionalHeader.ImageBase;
+    SIZE_T ImageSize = NtHeaders->OptionalHeader.SizeOfImage;
+    if (Delta == 0) {
+        return STATUS_SUCCESS;
+    }
+
+    SIZE_T DirectorySize;
+    UINT_PTR Pos = (UINT_PTR)RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_BASERELOC, &DirectorySize);
+    if (Pos == 0x0) {
+        return STATUS_INVALID_IMAGE;
+    }
+
+    UINT_PTR End = Pos + DirectorySize;
+    while (Pos < End) {
+        UINT32 PageRva = *(UINT32*)Pos;
+        UINT32 BlockSize = *(UINT32*)(Pos + 4);
+
+        USHORT *Entries = (USHORT*)(Pos + 8);
+        for (UINT32 i = 0; i < (BlockSize - 8) / sizeof(USHORT); i++) {
+            UINT32 Type = Entries[i] >> 12;
+            if (Type == 0) {
+                continue;
+            }
+
+            UINT32 Offset = Entries[i] & 0xfff;
+            *(UINT64*)((UINT_PTR)ImageBase + PageRva + Offset) += Delta;
+        }
+
+        Pos += BlockSize;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static OS_STATUS LdrpResolveImports(VOID *ImageBase, IMAGE_NT_HEADERS *NtHeaders) {
+    SIZE_T ImageSize = NtHeaders->OptionalHeader.SizeOfImage;
+
+    // Get ImportDirectory
+    SIZE_T DirectorySize;
+    IMAGE_IMPORT_DESCRIPTOR *Import = RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &DirectorySize);
+    if (Import == NULL) {
+        return STATUS_SUCCESS;
+    }
+
+    UINT_PTR End = (UINT_PTR)Import + DirectorySize;
+    for (; (UINT_PTR)(Import + 1) <= End && Import->Name; Import++) {
+        CHAR *DllName = (CHAR*)((UINT_PTR)ImageBase + Import->Name);
+        UINT32 LookupRva = Import->OriginalFirstThunk ? Import->OriginalFirstThunk : Import->FirstThunk;
+
+        LOADED_DLL *Dll = LdrFindDllByName(DllName);
+        if (Dll == NULL) {
+            DbgPrint("LdrResolveImports failed, missing DLL %s\n", DllName);
+            return STATUS_DLL_NOT_FOUND;
+        }
+
+        IMAGE_THUNK_DATA *Lookup = (VOID*)((UINT_PTR)ImageBase + LookupRva);
+        IMAGE_THUNK_DATA *Thunk = (VOID*)((UINT_PTR)ImageBase + Import->FirstThunk);
+        SIZE_T Count = MIN((ImageSize - LookupRva) / sizeof(IMAGE_THUNK_DATA), (ImageSize - Import->FirstThunk) / sizeof(IMAGE_THUNK_DATA));
+        BOOLEAN Terminated = FALSE;
+        for (SIZE_T i = 0; i < Count; i++) {
+            if (Lookup[i].u1.Function == 0) {
+                Terminated = TRUE;
+                break;
+            }
+
+            IMAGE_IMPORT_BY_NAME *ImportName = (VOID*)((UINT_PTR)ImageBase + Lookup[i].u1.Function);
+            VOID *Address = LdrGetSymbol(Dll, (CHAR*)ImportName->Name);
+            if (Address == NULL) {
+                return STATUS_INVALID_IMAGE;
+            }
+
+            Thunk[i].u1.Function = (UINT_PTR)Address;
+        }
+
+        if (!Terminated) {
+            return STATUS_INVALID_IMAGE;
+        }
+    }
 
     return STATUS_SUCCESS;
 }
@@ -131,10 +214,7 @@ VOID *LdrGetSymbol(LOADED_DLL *Dll, const CHAR* SymbolName) {
 }
 
 BOOLEAN LdrFindSymbolByAddress(UINT_PTR Address, const CHAR **DllName, const CHAR **SymbolName, UINT_PTR *Offset) {
-    if (!LdrReady) {
-        return FALSE;
-    }
-
+    if (LdrLoadedDllList.Flink == NULL) return FALSE; // not even called LdrInitialize yet
     for (LIST_ENTRY *Ent = LdrLoadedDllList.Flink; Ent != &LdrLoadedDllList; Ent = Ent->Flink) {
         LOADED_DLL *Dll = CONTAINING_RECORD(Ent, LOADED_DLL, Entry);
         if (Address < Dll->ImageBase || Address - Dll->ImageBase >= Dll->ImageSize) {
@@ -173,90 +253,7 @@ BOOLEAN LdrFindSymbolByAddress(UINT_PTR Address, const CHAR **DllName, const CHA
     return FALSE;
 }
 
-static OS_STATUS LdrRelocateImage(VOID *ImageBase, IMAGE_NT_HEADERS *NtHeaders) {
-    UINT_PTR Delta = (UINT_PTR)ImageBase - NtHeaders->OptionalHeader.ImageBase;
-    SIZE_T ImageSize = NtHeaders->OptionalHeader.SizeOfImage;
-    if (Delta == 0) {
-        return STATUS_SUCCESS;
-    }
-
-    SIZE_T DirectorySize;
-    UINT_PTR Pos = (UINT_PTR)RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_BASERELOC, &DirectorySize);
-    if (Pos == 0x0) {
-        return STATUS_INVALID_IMAGE;
-    }
-
-    UINT_PTR End = Pos + DirectorySize;
-    while (Pos < End) {
-        UINT32 PageRva = *(UINT32*)Pos;
-        UINT32 BlockSize = *(UINT32*)(Pos + 4);
-
-        USHORT *Entries = (USHORT*)(Pos + 8);
-        for (UINT32 i = 0; i < (BlockSize - 8) / sizeof(USHORT); i++) {
-            UINT32 Type = Entries[i] >> 12;
-            if (Type == 0) {
-                continue;
-            }
-
-            UINT32 Offset = Entries[i] & 0xfff;
-            *(UINT64*)((UINT_PTR)ImageBase + PageRva + Offset) += Delta;
-        }
-
-        Pos += BlockSize;
-    }
-
-    return STATUS_SUCCESS;
-}
-
-static OS_STATUS LdrResolveImports(VOID *ImageBase, IMAGE_NT_HEADERS *NtHeaders) {
-    SIZE_T ImageSize = NtHeaders->OptionalHeader.SizeOfImage;
-    
-    // Get ImportDirectory
-    SIZE_T DirectorySize;
-    IMAGE_IMPORT_DESCRIPTOR *Import = RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &DirectorySize);
-    if (Import == NULL) {
-        return STATUS_INVALID_IMAGE;
-    }
-
-    UINT_PTR End = (UINT_PTR)Import + DirectorySize;
-    for (; (UINT_PTR)(Import + 1) <= End && Import->Name; Import++) {
-        CHAR *DllName = (CHAR*)((UINT_PTR)ImageBase + Import->Name);
-        UINT32 LookupRva = Import->OriginalFirstThunk ? Import->OriginalFirstThunk : Import->FirstThunk;
-
-        LOADED_DLL *Dll = LdrFindDllByName(DllName);
-        if (Dll == NULL) {
-            DbgPrint("LdrResolveImports failed, missing DLL %s\n", DllName);
-            return STATUS_DLL_NOT_FOUND;
-        }
-
-        IMAGE_THUNK_DATA *Lookup = (VOID*)((UINT_PTR)ImageBase + LookupRva);
-        IMAGE_THUNK_DATA *Thunk = (VOID*)((UINT_PTR)ImageBase + Import->FirstThunk);
-        SIZE_T Count = MIN((ImageSize - LookupRva) / sizeof(IMAGE_THUNK_DATA), (ImageSize - Import->FirstThunk) / sizeof(IMAGE_THUNK_DATA));
-        BOOLEAN Terminated = FALSE;
-        for (SIZE_T i = 0; i < Count; i++) {
-            if (Lookup[i].u1.Function == 0) {
-                Terminated = TRUE;
-                break;
-            }
-
-            IMAGE_IMPORT_BY_NAME *ImportName = (VOID*)((UINT_PTR)ImageBase + Lookup[i].u1.Function);
-            VOID *Address = LdrGetSymbol(Dll, (CHAR*)ImportName->Name);
-            if (Address == NULL) {
-                return STATUS_INVALID_IMAGE;
-            }
-
-            Thunk[i].u1.Function = (UINT_PTR)Address;
-        }
-
-        if (!Terminated) {
-            return STATUS_INVALID_IMAGE;
-        }
-    }
-
-    return STATUS_SUCCESS;
-}
-
-OS_STATUS LdrLoadDll(UINT_PTR ImageBase, SIZE_T ImageSize, LOADED_DLL **DllOut) {
+OS_STATUS LdrMapDll(UINT_PTR ImageBase, SIZE_T ImageSize, LOADED_DLL **DllOut) {
     if (ImageSize < sizeof(IMAGE_DOS_HEADER)) {
         return STATUS_INVALID_IMAGE;
     }
@@ -300,25 +297,43 @@ OS_STATUS LdrLoadDll(UINT_PTR ImageBase, SIZE_T ImageSize, LOADED_DLL **DllOut) 
     // Relocate NT headers now
     NtHeaders = RtlImageNtHeaders(Image);
 
-    OS_STATUS Status = LdrRelocateImage(Image, NtHeaders);
+    OS_STATUS Status = LdrpRelocateImage(Image, NtHeaders);
     if (!OS_SUCCESS(Status)) {
         DbgPrint("LdrRelocateImage failed with status 0x%08x\n", Status);
         MmFreeVirtualPagesArena(MmKernelArena, Image, NrPages);
         return Status;
     }
 
-    Status = LdrResolveImports(Image, NtHeaders);
+    LOADED_DLL *Dll;
+    Status = LdrpAddNewImage(Image, &Dll);
     if (!OS_SUCCESS(Status)) {
-        DbgPrint("LdrResolveImports failed with status 0x%08x\n", Status);
         MmFreeVirtualPagesArena(MmKernelArena, Image, NrPages);
         return Status;
     }
 
+    *DllOut = Dll;
+    return STATUS_SUCCESS;
+}
 
+OS_STATUS LdrResolveDllImports(LOADED_DLL *Dll) {
+    VOID *Image = (VOID*)Dll->ImageBase;
+    IMAGE_NT_HEADERS *NtHeaders = RtlImageNtHeaders(Image);
+    if (NtHeaders == NULL) {
+        return STATUS_INVALID_IMAGE;
+    }
+
+    return LdrpResolveImports(Image, NtHeaders);
+}
+
+OS_STATUS LdrLoadDll(UINT_PTR ImageBase, SIZE_T ImageSize, LOADED_DLL **DllOut) {
     LOADED_DLL *Dll;
-    Status = LdrAddNewImage(Image, &Dll);
+    OS_STATUS Status = LdrMapDll(ImageBase, ImageSize, &Dll);
     if (!OS_SUCCESS(Status)) {
-        MmFreeVirtualPagesArena(MmKernelArena, Image, NrPages);
+        return Status;
+    }
+
+    Status = LdrResolveDllImports(Dll);
+    if (!OS_SUCCESS(Status)) {
         return Status;
     }
 
@@ -332,9 +347,10 @@ OS_STATUS LdrInitializeHal() {
         return STATUS_DLL_NOT_FOUND;
     }
 
+    // Load the HAL
     LOADER_MODULE *HalModule = &KeLoaderParameterBlock->LoadedModules[0];
     LOADED_DLL *HalDll;
-    OS_STATUS Status = LdrLoadDll(HalModule->Base, HalModule->Size, &HalDll);
+    OS_STATUS Status = LdrLoadBootModule(HalModule, &HalDll);
     if (!OS_SUCCESS(Status)) {
         return Status;
     }
@@ -363,11 +379,10 @@ OS_STATUS LdrInitialize() {
     }
 
     InitializeListHead(&LdrLoadedDllList);
-    LdrReady = TRUE;
 
     // Register the kernel as a loaded DLL
     LOADED_DLL *KernelDll;
-    Status = LdrAddNewImage((VOID*)&__ImageBase, &KernelDll);
+    Status = LdrpAddNewImage((VOID*)&__ImageBase, &KernelDll);
     if (!OS_SUCCESS(Status)) {
         return Status;
     }

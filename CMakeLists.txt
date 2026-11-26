@@ -35,6 +35,7 @@ add_subdirectory("third_party")
 add_subdirectory("rtl")
 add_subdirectory("ionkrnl")
 add_subdirectory("hal")
+add_subdirectory("drivers")
 
 add_iso_file(${CMAKE_SOURCE_DIR}/limine.conf DESTINATION "boot/limine.conf")
 

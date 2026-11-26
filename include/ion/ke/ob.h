@@ -50,7 +50,7 @@ IONAPI VOID ObReferenceObject(VOID *Body);
 
 /* Handle table */
 OS_STATUS ObInitProcess(PROCESS *Parent, PROCESS *Process);
-OS_STATUS ObInsertObject(VOID *Object, HANDLE *HandleOut);
+OS_STATUS ObInsertObject(VOID *Object, VOID **NewObject, HANDLE *HandleOut);
 IONAPI OS_STATUS ObReferenceObjectByHandle(HANDLE Handle, OBJECT_TYPE *Type, KPROCESSOR_MODE AccessMode, VOID **Object);
 IONAPI OS_STATUS ObCloseHandle(HANDLE Handle);
 IONAPI OS_STATUS ObOpenObjectByPointer(
@@ -58,7 +58,16 @@ IONAPI OS_STATUS ObOpenObjectByPointer(
     ULONG HandleAttributes,
     ACCESS_MASK DesiredAccess,
     OBJECT_TYPE *ObjectType,
-    HANDLE **HandleOut
+    HANDLE *HandleOut
+);
+
+IONAPI OS_STATUS ObOpenObjectByName(
+    OBJECT_ATTRIBUTES *Attributes,
+    OBJECT_TYPE *ObjectType,
+    KPROCESSOR_MODE AccessMode,
+    ACCESS_MASK DesiredAccess,
+    VOID *ParseContext,
+    HANDLE *Handle
 );
 
 /* Directory */

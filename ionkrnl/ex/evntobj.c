@@ -26,7 +26,7 @@ IONAPI OS_STATUS OsCreateEvent(HANDLE *EventHandle, OBJECT_ATTRIBUTES *ObjectAtt
 
     KeInitializeEvent(Event, EventType, InitialState);
 
-    return ObInsertObject((VOID*)Event, EventHandle);
+    return ObInsertObject((VOID*)Event, NULL, EventHandle);
 }
 
 IONAPI OS_STATUS OsSetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousState) {

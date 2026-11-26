@@ -27,6 +27,7 @@ typedef LONG OS_STATUS;
 
 // success status
 #define STATUS_SUCCESS                  __SUCCESS(0x0)
+#define STATUS_OBJECT_NAME_EXISTS       __SUCCESS(0x1)
 
 // error status
 #define STATUS_INTERNAL_ERROR           __ERROR(0x1)
@@ -40,6 +41,7 @@ typedef LONG OS_STATUS;
 #define STATUS_INVALID_HANDLE           __ERROR(0x9)
 #define STATUS_TOO_MANY_OPENED_FILES    __ERROR(0x10)
 #define STATUS_OBJECT_TYPE_MISMATCH     __ERROR(0x11)
+#define STATUS_OBJECT_NAME_COLLISION    __ERROR(0x12)
 
 // Wait values that I didn't want to lump with success
 #define STATUS_WAIT_0                   __SUCCESS(0x0)
