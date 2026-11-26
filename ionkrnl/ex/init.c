@@ -14,8 +14,10 @@
 #include <ion/ke/ex.h>
 #include <ion/ke/ps.h>
 #include <ion/ke/ob.h>
+#include <ion/ke/io.h>
 #include <ion/ke/ke.h>
 #include <ion/ke/ldr.h>
+#include <ion/ke/io.h>
 #include <ion/ke/os.h>
 #include <ion/ion.h>
 
@@ -39,22 +41,51 @@ static OS_STATUS ExpInitializeTypes() {
     return STATUS_SUCCESS;
 }
 
+// Load fireworks demo if present
+static VOID ExpStartFireworks(VOID) {
+    LOADER_PARAMETER_BLOCK *Loader = KeGetLoaderParameterBlock();
+    for (SIZE_T i = 1; i < Loader->NrLoadedModules; i++) {
+        LOADER_MODULE *Module = &Loader->LoadedModules[i];
+
+        if (Module->Cmdline == NULL || !RtlStringEquals(Module->Cmdline, "/fwt")) {
+            continue;
+        }
+
+        LOADED_DLL *Dll;
+        OS_STATUS Status = LdrLoadDll(Module->Base, Module->Size, &Dll);
+
+        if (!OS_SUCCESS(Status)) {
+            DbgPrint("Fwt.dll failed to load DLL 0x%08x\n", Status);
+            return;
+        }
+        OS_STATUS (*FwtStart)(VOID) = (typeof(FwtStart))LdrGetSymbol(Dll, "FwtStart");
+        if (!FwtStart) {
+            DbgPrint("FwtStart not found!!!\n");
+            return;
+        }
+
+        FwtStart();
+        return;
+    }
+}
+
 NO_RETURN VOID ExInitialize() {
     DbgPrint("ExInitialize()\n");
 
     // Object manager
     INIT_OR_BUGCHECK(ObInitialize);
 
-    // Prepare types
+    // Prepare types (drivers might use them)
     INIT_OR_BUGCHECK(ExpInitializeTypes);
 
-    OBJECT_ATTRIBUTES EventAttributes = { .ObjectName = NULL, .Flags = OB_FLAG_KERNEL_OBJECT, .RootDirectory = NULL};
-    HANDLE EventHandle;
-    OS_STATUS Status = OsCreateEvent(&EventHandle, &EventAttributes, SynchronizationEvent, FALSE);
-    if (!OS_SUCCESS(Status)) KeBugCheckWithStatus(Status, "OsCreateEvent failed");
+    // IO
+    INIT_OR_BUGCHECK(IoInitialize);
 
-    DbgPrint("EventHandle = %p\n", EventHandle);
-    OsSetEvent(EventHandle, NULL);
+    // Fireworks
+    ExpStartFireworks();
+
+extern VOID  ObpDumpObjectTree();
+    ObpDumpObjectTree();
 
     for (;;) {
         PsYieldThread();

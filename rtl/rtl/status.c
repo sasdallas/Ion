@@ -14,6 +14,7 @@
 
 static const CHAR* RtlStatusStringsSuccess[] = {
     "The operation completed successfully.",
+    "The object name already exists.",
 };
 
 static const CHAR* RtlStatusStringsError[] = {
@@ -28,7 +29,8 @@ static const CHAR* RtlStatusStringsError[] = {
     "An operation timed out.",
     "An invalid HANDLE was specified.",
     "Too many files are opened.",
-    "The object type given does not match the object type expected."
+    "The object type given does not match the object type expected.",
+    "The object name given is already in use."
 };
 
 

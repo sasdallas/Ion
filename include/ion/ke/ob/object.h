@@ -18,9 +18,10 @@
 #include <ion/ke/ke/pushlock.h>
 
 #define OB_FLAG_NEW_OBJECT          0x01
-#define OB_FLAG_KERNEL_OBJECT       0x02
+#define OB_FLAG_KERNEL_OBJECT       0x02        // Equivalent to OBJ_KERNEL_HANDLE in windows
 #define OB_FLAG_PERMANENT_OBJECT    0x04
 #define OB_FLAG_EXCLUSIVE_OBJECT    0x08
+#define OB_FLAG_OPEN_IF             0x10
 
 #define OB_DIR_HASH_BUCKETS         37
 

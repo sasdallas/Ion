@@ -43,6 +43,7 @@ endif()
 
 list(APPEND __LDR_SOURCE
                     ldr/ldr.c
+                    ldr/driver.c
 )
 
 list(APPEND __HAL_SOURCE
@@ -77,4 +78,11 @@ list(APPEND __EX_SOURCE
                     ex/evntobj.c
 )
 
-list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE} ${__EX_SOURCE})
+list(APPEND __IO_SOURCE
+                    io/init.c
+                    io/driver.c
+                    io/bus.c
+                    io/device.c
+)
+
+list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE} ${__EX_SOURCE} ${__IO_SOURCE})
