@@ -114,14 +114,10 @@ static VOID KiEnableSSE() {
     asm volatile ("fninit");
 }
 
-VOID KeInitializeBsp() {
-    // x86_64 has guranteed SSE
+VOID KiInitializeProcessor(KCPU *Cpu) {
     KiEnableSSE();
 
-    // Prepare GDTR and install it
-    KiGdtDescriptor.Base = (UINT64)&KiGdtEntries;
-    KiGdtDescriptor.Limit = sizeof(KiGdtEntries);
-
+    // Prepare GDT
     asm volatile (
         "lgdt %0\n"
         "pushq $0x08\n"
@@ -136,6 +132,21 @@ VOID KeInitializeBsp() {
         // TODO: TSS
         :: "m"(KiGdtDescriptor) : "rax"
     ); 
+
+    // Setup CPU-specific data
+    Cpu->Irql = PASSIVE_LEVEL;
+    Cpu->Self = Cpu;
+    UINT_PTR Address = (UINT_PTR)Cpu;
+    asm volatile ("wrmsr" :: "a"((UINT32)Address), "d"((UINT32)(Address >> 32)), "c"(0xC0000102) : "memory");
+    asm volatile ("wrmsr" :: "a"((UINT32)Address), "d"((UINT32)(Address >> 32)), "c"(0xC0000101) : "memory");
+
+    KeHardwareUpdateIrql(PASSIVE_LEVEL);
+    KiInstallIdtr();
+}
+
+VOID KeInitializeBsp() {
+    KiGdtDescriptor.Base = (UINT64)&KiGdtEntries;
+    KiGdtDescriptor.Limit = sizeof(KiGdtEntries) - 1;
 
     // Prepare IDTR
     KiIdtDescriptor.Base = (UINT64)&KiIdt;
@@ -179,16 +190,7 @@ VOID KeInitializeBsp() {
         KiSetInterruptVector(i + 32, HandlerTable[i]);
     }
 
-    // IDTR
-    KiInstallIdtr();
-
-    // Set the BspCpu
-    KCPU *Bsp = &BspCpu;
-    BspCpu.Irql = PASSIVE_LEVEL;
-    BspCpu.Self = &BspCpu;
-    BspCpu.LogicalId = BspCpu.HardwareId = 0;
-    asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000102));
-    asm volatile ("wrmsr" :: "a"((UINT_PTR)Bsp & 0xFFFFFFFF), "d"(((UINT_PTR)Bsp >> 32) & 0xFFFFFFFF), "c"(0xC0000101));
+    KiInitializeProcessor(&BspCpu);
 }
 
 VOID KiCommonTrapDispatcher(TRAP_FRAME *TrapFrame) {
@@ -232,4 +234,10 @@ IONAPI OS_STATUS KeSetInterruptHandler(UINT Vector, VOID (*Handler)(TRAP_FRAME*)
 
     KiHandlerTable[Vector] = Handler;
     return STATUS_SUCCESS;
+}
+
+// NMIs are used by x86_64 to stop all other CPUs
+VOID KiNmiTrapHandler(TRAP_FRAME *TrapFrame) {
+    DISABLE_INTERRUPTS();
+    for (;;) KeHaltExecution();
 }

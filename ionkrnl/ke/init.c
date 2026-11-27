@@ -32,6 +32,19 @@ VOID KeTestThread(VOID *Context) {
     }
 }
 
+VOID KeInitializeAp() {
+    // Ke per-CPU
+    KiInitializeDpcQueue();
+    KeInitializeTimerSystem();
+
+    // Ps per-CPU
+    INIT_OR_BUGCHECK(PsInitializeScheduler);
+    INIT_OR_BUGCHECK(PsInitializeIdleThread);
+
+    // HAL
+    INIT_OR_BUGCHECK(HalInitializeAp);
+}
+
 OS_STATUS KiInitializeHal() {
     OS_STATUS Status = LdrInitializeHal();
     if (!OS_SUCCESS(Status)) return Status;
@@ -80,6 +93,11 @@ NO_RETURN VOID KeInitialize() {
     INIT_OR_BUGCHECK(PsInitializeIdleProcess);
     INIT_OR_BUGCHECK(PsInitializeIdleThread);
     INIT_OR_BUGCHECK(PsInitializeScheduler);
+
+    // SMP time
+#if _SMP
+    KiStartApplicationProcessors();
+#endif
 
     // Ready
     ENABLE_INTERRUPTS();

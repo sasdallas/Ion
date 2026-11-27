@@ -18,6 +18,8 @@
 IONHALAPI VOID HalPrintString(const CHAR* String);
 IONHALAPI VOID HalConsolePrintf(const CHAR* Format, ...);
 IONHALAPI OS_STATUS HalInitializeHardware();
+IONHALAPI OS_STATUS HalInitializeAp();
 IONHALAPI UINT64 HalQueryMonotonicTime();
+IONHALAPI VOID HalHaltAllOthers(VOID);
 
 #endif

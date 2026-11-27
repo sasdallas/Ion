@@ -27,6 +27,12 @@ IONAPI VOID HalSetVtable(HAL_VTABLE *Vtable) {
     HalpVtable = Vtable;
 }
 
+IONHALAPI VOID HalHaltAllOthers(VOID) {
+    if (HalpVtable != NULL && HalpVtable->HaltAllOthers != NULL) {
+        HalpVtable->HaltAllOthers();
+    }
+}
+
 IONHALAPI VOID HalPrintString(const CHAR* String) {
     if (HalpVtable == NULL) return;
     return HalpVtable->PrintString(String);
@@ -34,6 +40,10 @@ IONHALAPI VOID HalPrintString(const CHAR* String) {
 
 IONHALAPI OS_STATUS HalInitializeHardware() {
     return HalpVtable->InitializeHardware();
+}
+
+IONHALAPI OS_STATUS HalInitializeAp() {
+    return HalpVtable->InitializeAp();
 }
 
 IONHALAPI UINT64 HalQueryMonotonicTime() {

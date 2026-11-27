@@ -24,10 +24,17 @@
 static struct acpi_madt *HalpAcpiMadt;
 
 /* Local APIC */
-static VOID *HalpLocalApicIo;
+static VOID *HalpLocalApicIo = NULL;
+static BOOLEAN HalpHaltIpiSent = FALSE;
+static UINT32 HalpTimerTicks = 0;
 
 #define APIC_EOI                0xB0
 #define APIC_SPURIOUS_REGISTER  0xF0
+#define APIC_ICR_LOW            0x300
+#define APIC_ICR_NMI            (4u << 8)
+#define APIC_ICR_SEND_PENDING   (1u << 12)
+#define APIC_ICR_ASSERT         (1u << 14)
+#define APIC_ICR_ALL_OTHERS     (3u << 18)
 #define APIC_LVT_TIMER          0x320
 #define APIC_TIMER_INITIAL      0x380
 #define APIC_TIMER_CURRENT      0x390
@@ -71,6 +78,17 @@ static VOID HalpApicSpuriousInterrupt(TRAP_FRAME *TrapFrame) {
     return;
 }
 
+VOID HaliHaltAllOthers(VOID) {
+    if (HalpLocalApicIo == NULL) {
+        return;
+    }
+
+    // TODO IPI API
+    if (!__atomic_exchange_n(&HalpHaltIpiSent, TRUE, __ATOMIC_ACQ_REL)) {
+        HalpWriteLocalApic(APIC_ICR_LOW, APIC_ICR_ALL_OTHERS | APIC_ICR_ASSERT | APIC_ICR_NMI);
+    }
+}
+
 static OS_STATUS HalpInitializeApicTimer() {
     OS_STATUS Status = KeSetInterruptHandler(CLOCK_VECTOR, HalpApicTimerInterrupt);
     if (!OS_SUCCESS(Status)) return Status;
@@ -100,6 +118,7 @@ static OS_STATUS HalpInitializeApicTimer() {
     PortWrite8(0x61, Speaker);
     HalpWriteLocalApic(APIC_TIMER_INITIAL, 0);
 
+    HalpTimerTicks = Ticks;
     HalpWriteLocalApic(APIC_LVT_TIMER, 0x20000 | CLOCK_VECTOR);
     HalpWriteLocalApic(APIC_TIMER_INITIAL, Ticks);
     return STATUS_SUCCESS;
@@ -131,11 +150,13 @@ OS_STATUS HalApicInitialize() {
         return STATUS_NO_MEMORY;
     }
 
-    // Timer
-    OS_STATUS OsStatus = HalpInitializeApicTimer();
-    if (!OS_SUCCESS(OsStatus)) {
-        return OsStatus;
-    }
+    return HalpInitializeApicTimer();
+}
 
+OS_STATUS HaliInitializeAp(VOID) {
+    HalpWriteLocalApic(APIC_SPURIOUS_REGISTER, 0x100 | APIC_SPURIOUS_VECTOR);
+    HalpWriteLocalApic(APIC_TIMER_DIVIDE, 0x3);
+    HalpWriteLocalApic(APIC_LVT_TIMER, 0x20000 | CLOCK_VECTOR);
+    HalpWriteLocalApic(APIC_TIMER_INITIAL, HalpTimerTicks);
     return STATUS_SUCCESS;
 }

@@ -26,6 +26,7 @@ typedef struct _TRAP_FRAME {
 } TRAP_FRAME;
 
 #define KERNEL_CODE_SEGMENT     0x08
+#define NMI_VECTOR              0x02
 
 #define PASSIVE_LEVEL           0x00
 #define APC_LEVEL               0x01
@@ -44,6 +45,9 @@ typedef struct _TRAP_FRAME {
 
 #define DISABLE_INTERRUPTS() asm volatile ("cli")
 #define ENABLE_INTERRUPTS() asm volatile ("sti")
+
+VOID KiInitializeProcessor(KCPU *Cpu);
+VOID KiStartApplicationProcessors(VOID);
 
 #define TRAP_PC(TrapFrame) ((TrapFrame)->Rip)
 #define TRAP_ADDR(TrapFrame) ((TrapFrame)->Cr2)

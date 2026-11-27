@@ -38,6 +38,7 @@ IONAPI BOOLEAN KeTryAcquireSpinLockAtDpcLevel(KSPIN_LOCK *SpinLock);
 /* Initialize */
 NO_RETURN VOID KeInitialize();
 VOID KeInitializeBsp();
+VOID KeInitializeAp(); // in generic code
 
 /* Bugcheck */
 IONAPI NO_RETURN VOID KeBugCheckWithMessage(const CHAR* Message, ...);
@@ -79,7 +80,7 @@ OS_STATUS KeWaitForMultipleObjects(
     KWAIT_BLOCK *WaitBlockArray
 );
 
-OS_STATUS KeWaitForSingleObject(
+IONAPI OS_STATUS KeWaitForSingleObject(
     VOID *Object,
     KWAIT_REASON WaitReason,
     KPROCESSOR_MODE WaitMode,

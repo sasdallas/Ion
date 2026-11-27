@@ -11,6 +11,7 @@
  */
 
 #include <ion/ion.h>
+#include <ion/hal.h>
 #include <ion/ke/ke.h>
 #include <ion/ke/mm.h>
 #include <ion/third_party/limine.h>
@@ -66,13 +67,26 @@ volatile struct limine_rsdp_request KeLimineRsdpRequest = {
     .revision = 0
 };
 
+#if _SMP
+#if LIMINE_API_REVISION >= 1
+#define KI_LIMINE_MP_REQUEST LIMINE_MP_REQUEST
+#else
+#define KI_LIMINE_MP_REQUEST LIMINE_SMP_REQUEST
+#endif
+
+volatile struct LIMINE_MP(request) KiLimineMpRequest = {
+    .id = KI_LIMINE_MP_REQUEST,
+    .revision = 0,
+};
+#endif
+
 /* HHDM */
 #define TO_HHDM(x) (VOID*)(KeLimineHhdmRequest.response->offset + (x))
 
 /* Loader block */
 static LOADER_PARAMETER_BLOCK __KeLoaderParameterBlock;
 
-static VOID* KeAllocateFromMemmap(SIZE_T Size) {
+VOID* KeAllocateFromMemmap(SIZE_T Size) {
     /* round up size */
     Size = (Size + 0xFFF) & ~0xFFF;
 
@@ -136,6 +150,12 @@ VOID KeInitLoaderParameterBlock() {
         LpbFramebuffers = TO_HHDM(KeAllocateFromMemmap(
             FramebufferResponse->framebuffer_count * sizeof(LOADER_FRAMEBUFFER)));
     }
+
+    // Prepare AP bootstrap code
+#if _SMP
+    extern VOID KiAllocateBootstrapInformation();
+    KiAllocateBootstrapInformation();
+#endif
 
     // Build the LPB memory map after all early allocations are reserved.
     for (SIZE_T i = 0; i < MemMap->entry_count; i++) {

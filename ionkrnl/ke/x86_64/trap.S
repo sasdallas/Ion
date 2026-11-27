@@ -15,6 +15,7 @@
 .extern KiUnknownTrapHandler
 .extern KiPageFaultHandler
 .extern KiCommonTrapDispatcher
+.extern KiNmiTrapHandler
 
 /* Swap GS base */
 .macro _swapgs
@@ -122,7 +123,7 @@
 /* Traps */
 TRAP_HANDLER_NOERR   KiDivisionException,               0,  KiUnknownTrapHandler
 TRAP_HANDLER_NOERR   KiDebugException,                  1,  KiUnknownTrapHandler
-TRAP_HANDLER_NOERR   KiNMIException,                    2,  KiUnknownTrapHandler
+TRAP_HANDLER_NOERR   KiNMIException,                    2,  KiNmiTrapHandler
 TRAP_HANDLER_NOERR   KiBreakpointException,             3,  KiUnknownTrapHandler
 TRAP_HANDLER_NOERR   KiOverflowException,               4,  KiUnknownTrapHandler
 TRAP_HANDLER_NOERR   KiBoundException,                  5,  KiUnknownTrapHandler

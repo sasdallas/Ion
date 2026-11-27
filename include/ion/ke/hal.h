@@ -17,8 +17,10 @@
 
 typedef struct _HAL_VTABLE {
     OS_STATUS (*InitializeHardware)();
+    OS_STATUS (*InitializeAp)();
     VOID (*PrintString)(const CHAR* String);
     UINT64 (*QueryMonotonicTime)(); // in nanoseconds
+    VOID (*HaltAllOthers)(VOID);
 } HAL_VTABLE;
 
 IONAPI VOID HalSetVtable(HAL_VTABLE *Vtable);

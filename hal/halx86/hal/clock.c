@@ -3,7 +3,7 @@
  * @brief x86 clock interface
  * 
  * Supports invariant TSC only for now, and this is pretty crap.
- * Just here so I can get Halx86QueryMonotonicTime working
+ * Just here so I can get HaliQueryMonotonicTime working
  * 
  * @copyright
  * This file is part of the Ion operating system.
@@ -32,7 +32,7 @@ FORCE_INLINE UINT64 __rdtsc() {
     return ((UINT64)High << 32) | Low;
 }
 
-UINT64 Halx86QueryMonotonicTime() {
+UINT64 HaliQueryMonotonicTime() {
     return (UINT64)(((__uint128_t)(__rdtsc() - HalpBaseTsc) * HalpTscMultiplier) >> 32);
 }
 

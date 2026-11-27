@@ -18,7 +18,7 @@ extern const UCHAR Halx86VgaFont[256][16];
 
 static struct flanterm_context *Halx86Console = NULL;
 
-VOID Halx86PrintString(const CHAR *String) {
+VOID HaliPrintString(const CHAR *String) {
     if (Halx86Console == NULL) return;
 
     while (*String) {

@@ -16,18 +16,22 @@
 #include <ion/ion.h>
 #include <uacpi/uacpi.h>
 
-VOID Halx86PrintString(const CHAR *String);
-UINT64 Halx86QueryMonotonicTime();
+VOID HaliPrintString(const CHAR *String);
+UINT64 HaliQueryMonotonicTime();
 OS_STATUS Halx86InitSystemConsole();
-OS_STATUS Halx86InitializeHardware();
+OS_STATUS HaliInitializeHardware();
+
+OS_STATUS HaliInitializeAp(VOID);
 
 HAL_VTABLE Halx86Vtable = {
-    .InitializeHardware = Halx86InitializeHardware,
-    .PrintString = Halx86PrintString,
-    .QueryMonotonicTime = Halx86QueryMonotonicTime,
+    .InitializeHardware = HaliInitializeHardware,
+    .InitializeAp = HaliInitializeAp,
+    .PrintString = HaliPrintString,
+    .QueryMonotonicTime = HaliQueryMonotonicTime,
+    .HaltAllOthers = HaliHaltAllOthers,
 };
 
-OS_STATUS Halx86InitializeHardware() {
+OS_STATUS HaliInitializeHardware() {
     OS_STATUS Status = HalAcpiInitialize();
     if (!OS_SUCCESS(Status)) {
         return Status;

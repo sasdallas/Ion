@@ -11,6 +11,7 @@
  */
 
 #include <ion/ion.h>
+#include <ion/ke/ke.h>
 #include <ion/x86_64/port.h>
 #include <ion/hal.h>
 
@@ -32,6 +33,8 @@
 #define MCR_DTR 0x01 // Data transmit ready
 #define MCR_RTS 0x02 // Ready to send
 #define MCR_OUT2 0x08 // IRQ pin
+
+static KSPIN_LOCK DbgOutputLock;
 
 static VOID DbgWriteComPort(UINT8 Register, UINT8 Value) {
     PortWrite8(COM_BASE + Register, Value);
@@ -80,6 +83,12 @@ static VOID DbgPrintChar(CHAR c) {
 }
 
 VOID DbgPrintString(const CHAR* String) {
+    // IRQL may not be ready
+    BOOLEAN InterruptsEnabled = KeSetInterruptState(FALSE);
+    while (__atomic_test_and_set(&DbgOutputLock, __ATOMIC_ACQUIRE)) {
+        KeStallExecution();
+    }
+
     HalPrintString(String);
     while (*String) {
         if (*String == '\n') {
@@ -88,4 +97,7 @@ VOID DbgPrintString(const CHAR* String) {
         
         DbgPrintChar(*String++);
     }
+
+    __atomic_clear(&DbgOutputLock, __ATOMIC_RELEASE);
+    KeSetInterruptState(InterruptsEnabled);
 }

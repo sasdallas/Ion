@@ -20,6 +20,7 @@ OS_STATUS HalAcpiInitialize();
 
 /* APIC */
 OS_STATUS HalApicInitialize();
+VOID HaliHaltAllOthers(VOID);
 
 /* Clock */
 OS_STATUS HalClockInitialize();
