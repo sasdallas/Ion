@@ -15,6 +15,7 @@
 static const CHAR* RtlStatusStringsSuccess[] = {
     "The operation completed successfully.",
     "The object name already exists.",
+    "The operation is pending.",
 };
 
 static const CHAR* RtlStatusStringsError[] = {
@@ -30,7 +31,9 @@ static const CHAR* RtlStatusStringsError[] = {
     "An invalid HANDLE was specified.",
     "Too many files are opened.",
     "The object type given does not match the object type expected.",
-    "The object name given is already in use."
+    "The object name given is already in use.",
+    "An invalid device request code was provided.",
+    "Operation not implemented."
 };
 
 

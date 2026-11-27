@@ -21,6 +21,7 @@ HANDLE IoDeviceDirectory = NULL;
 extern OS_STATUS IopInitializeDrivers();
 extern OS_STATUS IopInitializeRootBus();
 extern OS_STATUS IopInitializeDeviceManager();
+extern OS_STATUS IopInitializeFileManager();
 
 OS_STATUS IoInitialize() {
     // Create the device directory
@@ -44,6 +45,12 @@ OS_STATUS IoInitialize() {
 
     // Initialize devmgr
     Status = IopInitializeDeviceManager();
+    if (!OS_SUCCESS(Status)) {
+        return Status;
+    }
+
+    // Initialize file object type
+    Status = IopInitializeFileManager();
     if (!OS_SUCCESS(Status)) {
         return Status;
     }

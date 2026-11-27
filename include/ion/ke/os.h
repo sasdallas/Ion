@@ -16,6 +16,7 @@
 #include <ion/base.h>
 #include <ion/ke/ob.h>
 #include <ion/ke/ke_types.h>
+#include <ion/ke/io/packet.h>
 
 IONAPI OS_STATUS OsCreateEvent(HANDLE *EventHandle, OBJECT_ATTRIBUTES *ObjectAttributes, KEVENT_TYPE EventType, BOOLEAN InitialState);
 IONAPI OS_STATUS OsSetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousState);
@@ -23,5 +24,25 @@ IONAPI OS_STATUS OsClearEvent(IN HANDLE EventHandle);
 IONAPI OS_STATUS OsResetEvent(IN HANDLE EventHandle, OUT OPTIONAL LONG *PreviousState);
 
 IONAPI OS_STATUS OsCreateDirectoryObject(OUT HANDLE *DirectoryHandle, IN ACCESS_MASK DesiredAccess, IN OBJECT_ATTRIBUTES *ObjectAttributes);
+
+IONAPI OS_STATUS OsOpenFile(
+    OUT HANDLE *FileHandle,
+    ACCESS_MASK DesiredAccess,
+    OBJECT_ATTRIBUTES *ObjectAttributes,
+    ULONG OpenOptions
+);
+
+IONAPI OS_STATUS OsDeviceIoControlFile(
+    HANDLE FileHandle,
+    HANDLE Event,
+    IO_STATUS_BLOCK *IoStatus,
+    ULONG IoControlCode,
+    VOID *InputBuffer,
+    ULONG InputBufferLength,
+    VOID *OutputBuffer,
+    ULONG OutputBufferLength
+);
+
+IONAPI OS_STATUS OsClose(HANDLE Handle);
 
 #endif

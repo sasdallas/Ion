@@ -29,11 +29,16 @@ typedef enum _DEVICE_TYPE {
 typedef struct _DEVICE_OBJECT {
     ULONG Flags;
     DEVICE_TYPE Type;
+
     struct _DRIVER_OBJECT *Driver;
     LIST_ENTRY DriverEntry;
 
     struct _BUS_OBJECT *Bus;
     LIST_ENTRY BusEntry;
+
+    SIZE_T IrpStackSize;
+
+    VOID *DeviceExtension;
 } DEVICE_OBJECT;
 
 #endif

@@ -30,9 +30,9 @@ Otherwise, Ion follows a mostly NT-like pattern, with `Ex` containing the execut
 
 ## Sources
 
-FreeBSD for the ULE scheduler design.
+Windows NT for most of the overall kernel design.
 
-Windows NT for the overall kernel design.
+FreeBSD for the ULE scheduler design.
 
 [The MINTIA2 operating system](https://github.com/xrarch/mintia2) inspired a lot of Ion's scheduler and Mm code
 

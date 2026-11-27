@@ -83,6 +83,8 @@ list(APPEND __IO_SOURCE
                     io/driver.c
                     io/bus.c
                     io/device.c
+                    io/file.c
+                    io/packet.c
 )
 
 list(APPEND __KRNL_SOURCE ${__KE_SOURCE} ${__MM_SOURCE} ${__LDR_SOURCE} ${__HAL_SOURCE} ${__OB_SOURCE} ${__PS_SOURCE} ${__EX_SOURCE} ${__IO_SOURCE})

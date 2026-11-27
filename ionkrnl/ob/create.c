@@ -44,6 +44,8 @@ VOID ObpFreeObject(OBJECT_HEADER *Header) {
     MmFreeHeap(Header);
 }
 
+// quirk: this gives zero-initialized memory every time
+// TODO: i should add a flag to opt out of that
 IONAPI OS_STATUS ObCreateObject(
     OBJECT_TYPE *ObjectType,
     OBJECT_ATTRIBUTES *ObjectAttributes,

@@ -39,7 +39,10 @@ typedef VOID (*OB_DUMP_PROCEDURE)(VOID *Object);
 typedef OS_STATUS (*OB_OPEN_PROCEDURE)(VOID *Object, OB_OPEN_REASON OpenReason, INT HandleCount);
 typedef VOID (*OB_CLOSE_PROCEDURE)(VOID *Object, INT HandleCount);
 typedef VOID (*OB_DESTROY_PROCEDURE)(VOID *Object);
-typedef OS_STATUS (*OB_PARSE_PROCEDURE)(VOID *ParseObject, VOID *ObjectType, CHAR **CompleteName, CHAR **RemainingName, VOID *Context, VOID **Object);
+
+// On success, Object receives a referenced object:
+struct _OB_STRING_VIEW; // i dont have UNICODE_STRING
+typedef OS_STATUS (*OB_PARSE_PROCEDURE)(VOID *ParseObject, VOID *ObjectType, struct _OB_STRING_VIEW *CompleteName, struct _OB_STRING_VIEW *RemainingName, VOID *Context, VOID **Object);
 
 typedef struct _OBJECT_TYPE_ATTRIBUTES {
     ULONG InvalidAttributes; // flags to reject on request 
@@ -89,6 +92,13 @@ typedef struct _OBJECT_HEADER {
 
     ULONG Body[0];
 } OBJECT_HEADER;
+
+typedef struct _OB_STRING_VIEW {
+    CHAR *Buffer;
+    SIZE_T Length;
+} OB_STRING_VIEW;
+
+#define ObpAdvanceStringView(Sv) do { (Sv)->Buffer++; (Sv)->Length--; } while (0);
 
 #define OBJECT_GET_HEADER(Obj) (CONTAINING_RECORD(Obj, OBJECT_HEADER, Body))
 #define HEADER_GET_OBJECT(Obj) ((VOID*)((Obj)->Body))

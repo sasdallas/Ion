@@ -48,3 +48,16 @@ OS_STATUS IopInitializeDrivers() {
 
     return LdrLoadBootDrivers();
 }
+
+IONAPI OS_STATUS IoCallDriver(DEVICE_OBJECT *Device, IRP *Irp) {
+    Irp->CurrentLocation--;
+    ASSERT(Irp->CurrentLocation > 0 && "Out of IRP stack locations");
+
+    IO_STACK_LOCATION *Stack = IoGetNextIrpStackLocation(Irp);
+    Irp->CurrentStackLocation = Stack;
+
+    Stack->DeviceObject = Device;
+
+    return Device->Driver->MajorFunction[Stack->MajorFunction](Device, Irp);
+}
+

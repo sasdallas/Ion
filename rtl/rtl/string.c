@@ -47,6 +47,14 @@ SIZE_T RtlStringLength(CHAR *String) {
     return Length;
 }
 
+size_t strlen(char *string) {
+    SIZE_T Length = 0;
+    while (*string++) {
+        Length += 1;
+    }
+    return Length;
+}
+
 VOID RtlCopyStringN(CHAR* Destination, const CHAR* Source, SIZE_T MaxSize) {
     while (MaxSize--) {
         if (*Source) {

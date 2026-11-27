@@ -15,6 +15,7 @@
 
 #include <ion/base.h>
 #include <ion/ke/ldr.h>
+#include <ion/ke/io/packet.h>
 
 struct _DRIVER_OBJECT;
 
@@ -30,6 +31,8 @@ typedef struct _DRIVER_OBJECT {
 
     DRIVER_ENTRY DriverEntry;
     DRIVER_UNLOAD DriverUnload;
+
+    IO_DISPATCH_ROUTINE MajorFunction[IRP_MJ_NUMBER];
 } DRIVER_OBJECT;
 
 #endif

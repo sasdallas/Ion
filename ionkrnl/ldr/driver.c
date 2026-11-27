@@ -77,6 +77,7 @@ OS_STATUS LdrpLoadBootDriver(LOADED_DRIVER *LoadedDriver) {
     }
 
     // Prepare driver object
+    // TODO: Should move this junk logic to io/driver.c
     InitializeListHead(&Driver->Devices);
     Driver->NrDevices = 0;
     Driver->DriverName = Dll->Name;
@@ -87,6 +88,10 @@ OS_STATUS LdrpLoadBootDriver(LOADED_DRIVER *LoadedDriver) {
         DbgPrint("Entrypoint not found in %s\n", Dll->Name);
         ObDereferenceObject(Driver);
         return STATUS_ENTRYPOINT_NOT_FOUND;
+    }
+
+    for (INT i = 0; i < IRP_MJ_NUMBER; i++) {
+        Driver->MajorFunction[i] = IopInvalidDeviceRequest;
     }
 
     // We keep a pointer reference for slightly longer, and ObInsertObject consumes the one

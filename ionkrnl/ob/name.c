@@ -15,13 +15,6 @@
 #include <ion/ke/mm.h>
 #include <ion/ion.h>
 
-typedef struct _PATH_VIEW {
-    CHAR *Buffer;
-    SIZE_T Length;
-} PATH_VIEW;
-
-#define ObpAdvancePathView(Pv) do { (Pv)->Buffer++; (Pv)->Length--; } while (0);
-
 /**
  * Look up an object from a directory.
  * This is the core of the Object Manager's namespace system. It does the path
@@ -41,10 +34,6 @@ OS_STATUS ObpLookupObjectName(
     if (!ObjectString) return STATUS_INVALID_PARAMETER;
 
     // Begin searching at the root directory.
-    OBJECT_DIRECTORY *Directory = ObpRootDirectoryObject;
-    VOID *LastObject = Directory;
-    OS_STATUS Status = STATUS_SUCCESS;
-    BOOLEAN LastObjectReferenced = FALSE;
 
     // This is an initialization case, ObpRootDirectoryObject
     if (UNLIKELY(ObpRootDirectoryObject == NULL)) {
@@ -56,26 +45,36 @@ OS_STATUS ObpLookupObjectName(
         return STATUS_SUCCESS; 
     }
 
-    // A root handle applies to relative names. Absolute names start at /.
+    OBJECT_DIRECTORY *Directory = ObpRootDirectoryObject;
+    VOID *LastObject = Directory;
+    BOOLEAN WasReferenced = FALSE;
+    BOOLEAN DidDoTheParse = FALSE;
+
+    // A root handle applies to relative names, and absolute names start at /.
     if (RootHandle && ObjectString[0] != OB_PATH_SEPARATOR) {
-        Status = ObReferenceObjectByHandle(RootHandle, ObDirectoryObjectType, KernelMode, &LastObject);
-        if (!OS_SUCCESS(Status)) return Status;
-        LastObjectReferenced = TRUE;
+        OS_STATUS Status = ObReferenceObjectByHandle(RootHandle, ObDirectoryObjectType, KernelMode, &LastObject);
+        if (!OS_SUCCESS(Status)) {
+            return Status;
+        }
+
+        WasReferenced = TRUE;
         Directory = LastObject;
     }
 
     // Tokenize!
-    PATH_VIEW View = { .Buffer = ObjectString, .Length = RtlStringLength(ObjectString) };
+    OB_STRING_VIEW View = { .Buffer = ObjectString, .Length = RtlStringLength(ObjectString) };
+    OB_STRING_VIEW FullView = View; // Create a clone for objects with a parse method
+    OS_STATUS Status = STATUS_SUCCESS;
     while (View.Length) {
         // Skip the first token if it's a /
         if (*View.Buffer == OB_PATH_SEPARATOR) {
-            ObpAdvancePathView(&View);
+            ObpAdvanceStringView(&View);
         }
 
         // Create component path
-        PATH_VIEW Component = View;
+        OB_STRING_VIEW Component = View;
         while (View.Length && *View.Buffer != OB_PATH_SEPARATOR) {
-            ObpAdvancePathView(&View);
+            ObpAdvanceStringView(&View);
         }
 
         Component.Length -= View.Length;
@@ -87,7 +86,29 @@ OS_STATUS ObpLookupObjectName(
         // via ParseProcedure.
         OBJECT_HEADER *LastObjectHeader = OBJECT_GET_HEADER(LastObject);
         if (LastObjectHeader->Type->Info.ParseProcedure) {
-            ASSERT(0 && "ParseProcedure is not implemented");
+            Status = LastObjectHeader->Type->Info.ParseProcedure(
+                LastObject,
+                ObjectType,
+                &FullView,
+                &View,
+                ParseContext,
+                &NextObject
+            );
+
+            if (!OS_SUCCESS(Status)) {
+                goto Cleanup;
+            }
+
+            if (!NextObject) {
+                Status = STATUS_NOT_FOUND;
+                goto Cleanup;
+            }
+
+            if (WasReferenced) ObDereferenceObject(LastObject);
+            LastObject = NextObject;
+            WasReferenced = TRUE;
+            DidDoTheParse = TRUE;
+            break;
         } else {
             if (LastObjectHeader->Type != ObDirectoryObjectType) {
                 Status = STATUS_OBJECT_TYPE_MISMATCH;
@@ -98,9 +119,9 @@ OS_STATUS ObpLookupObjectName(
             Directory = LastObject;
             NextObject = ObpLookupEntryDirectory(Directory, Component.Buffer, Component.Length);
 
-            PATH_VIEW Remaining = View;
+            OB_STRING_VIEW Remaining = View;
             while (Remaining.Length && *Remaining.Buffer == OB_PATH_SEPARATOR) {
-                ObpAdvancePathView(&Remaining);
+                ObpAdvanceStringView(&Remaining);
             }
 
             // Handle the insertion case.
@@ -144,12 +165,48 @@ OS_STATUS ObpLookupObjectName(
             goto Cleanup;
         }
 
-        if (LastObjectReferenced) {
+        if (WasReferenced) {
             ObDereferenceObject(LastObject);
         }
         
         LastObject = NextObject;
-        LastObjectReferenced = TRUE;
+        WasReferenced = TRUE;
+    }
+
+    // We also have to parse the last object, e.g. /Devices/Beep still needs the Parse method called on it
+    OBJECT_HEADER *LastObjectHeader = OBJECT_GET_HEADER(LastObject);
+    if (!InsertObject && !DidDoTheParse && LastObjectHeader->Type->Info.ParseProcedure) {
+        // Validate object type here since we have to do two validations
+        if (ObjectType && LastObjectHeader->Type != ObjectType) {
+            Status = STATUS_OBJECT_TYPE_MISMATCH;
+            goto Cleanup;
+        }
+
+        VOID *ParsedObject = NULL;
+        Status = LastObjectHeader->Type->Info.ParseProcedure(
+            LastObject,
+            ObjectType,
+            &FullView,
+            &View,
+            ParseContext,
+            &ParsedObject
+        );
+
+        if (!OS_SUCCESS(Status)) {
+            goto Cleanup;
+        }
+
+        if (ParsedObject == NULL) {
+            Status = STATUS_NOT_FOUND;
+            goto Cleanup;
+        }
+
+        if (WasReferenced) {
+            ObDereferenceObject(LastObject);
+        }
+
+        LastObject = ParsedObject;
+        WasReferenced = TRUE;
     }
 
     // Check ObjectType now
@@ -161,7 +218,7 @@ OS_STATUS ObpLookupObjectName(
     if (FoundObject) {
         // If the user wanted to get the root directory, it skipped the reference
         // path, so do it here I guess.
-        if (!LastObjectReferenced) {
+        if (!WasReferenced) {
             ObReferenceObject(LastObject);
         }
 
@@ -170,6 +227,6 @@ OS_STATUS ObpLookupObjectName(
     }
 
 Cleanup:
-    if (LastObjectReferenced) ObDereferenceObject(LastObject);
+    if (WasReferenced) ObDereferenceObject(LastObject);
     return Status;
 }
